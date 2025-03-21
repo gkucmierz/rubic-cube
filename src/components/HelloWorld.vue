@@ -18,7 +18,7 @@
 .container {
   width: 200px;
   height: 200px;
-  perspective: 500px;
+  perspective: 400px;
   margin: 100px;
 }
 
@@ -96,14 +96,12 @@
 
 @keyframes turn {
   from { transform: rotate3d(0, 0, 0, 0); }
-  to { transform: rotate3d(1, 1, 0, 360deg); }
+  to { transform: rotate3d(1, 0, 1, 360deg); }
 }
 
 .cube {
   position: relative;
-  width: 200px;
-  height: 200px;
   transform-style: preserve-3d;
-  animation: turn 5s linear infinite;
+  animation: turn 1500ms linear infinite;
 }
 </style>
