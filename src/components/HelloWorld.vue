@@ -96,12 +96,12 @@
 
 @keyframes turn {
   from { transform: rotate3d(0, 0, 0, 0); }
-  to { transform: rotate3d(1, 0, 1, 360deg); }
+  to { transform: rotate3d(1, 1, 0, 360deg); }
 }
 
 .cube {
   position: relative;
   transform-style: preserve-3d;
-  animation: turn 1500ms linear infinite;
+  animation: turn 3s linear infinite;
 }
 </style>
