@@ -22,6 +22,26 @@
   margin: 100px;
 }
 
+.top {
+  background: white;
+}
+.bottom {
+  background: yellow;
+}
+.front {
+  background: blue;
+}
+.back {
+  background: green;
+}
+.left {
+  background: red;
+}
+.right {
+  background: orange;
+}
+
+
 .cube {
   position: relative;
   width: 200px;
@@ -32,10 +52,9 @@
 .face {
   width: 200px;
   height: 200px;
-  background: skyblue;
-  border: 2px solid black;
+  border: 0px solid black;
   position: absolute;
-  opacity: 0.7;
+  opacity: 0.9;
   display: flex;
   align-items: center;
   justify-content: center;
