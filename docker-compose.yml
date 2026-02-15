@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  rubic-cube:
+    image: gitea.7u.pl/gkucmierz/rubic-cube:latest
+    container_name: rubic-cube
+    restart: always
+    ports:
+      - "8083:80"
+    networks:
+      - rubic-net
+
+networks:
+  rubic-net:
+    driver: bridge
