@@ -1,4 +1,5 @@
-name: Build and Publish Docker Image
+name: Deploy to Production
+run-name: Deploy to Production by @${{ github.actor }}
 
 on:
   push:
@@ -6,25 +7,17 @@ on:
       - main
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  deploy:
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Check out repository code
+        uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to Gitea Registry
-        uses: docker/login-action@v2
-        with:
-          registry: gitea.7u.pl
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: gitea.7u.pl/gkucmierz/rubic-cube:latest
+      - name: Build and deploy with Docker Compose
+        run: |
+          # Próba zatrzymania i usunięcia starego kontenera (ignoruje błąd jeśli nie istnieje)
+          docker compose down --remove-orphans || true
+          docker rm -f rubic-cube || true
+          
+          # Start nowej wersji
+          docker compose up -d --build
