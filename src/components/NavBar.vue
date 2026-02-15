@@ -1,6 +1,9 @@
 <script setup>
 import { Sun, Moon } from 'lucide-vue-next';
 import { ref, onMounted } from 'vue';
+import { useRenderer } from '../composables/useRenderer';
+
+const { activeRenderer, setRenderer, RENDERERS } = useRenderer();
 
 const isDark = ref(true);
 
@@ -50,6 +53,18 @@ onMounted(() => {
     </div>
 
     <div class="nav-container">
+      <div class="renderer-selector">
+        <button 
+          v-for="renderer in RENDERERS" 
+          :key="renderer" 
+          @click="setRenderer(renderer)"
+          class="renderer-btn"
+          :class="{ active: activeRenderer === renderer }"
+        >
+          {{ renderer }}
+        </button>
+      </div>
+
       <!-- Theme Toggle -->
       <button class="btn-neon nav-btn icon-only" @click="toggleTheme" :title="isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny'">
         <Sun v-if="isDark" :size="20" />
@@ -95,6 +110,36 @@ onMounted(() => {
   display: flex;
   gap: 15px;
   align-items: center;
+}
+
+.renderer-selector {
+  display: flex;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.renderer-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.renderer-btn:hover {
+  color: var(--text-color);
+}
+
+.renderer-btn.active {
+  background: var(--glass-border);
+  color: var(--text-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .nav-btn {
