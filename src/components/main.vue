@@ -117,11 +117,12 @@ const cubeStyle = computed(() => ({
 .face {
   width: 300px;
   height: 300px;
-  background: #000;
+  background: var(--cube-edge-color, #000);
   padding: 9px;
   box-sizing: border-box;
   position: absolute;
   opacity: 0.9;
+  transition: background-color 0.3s ease;
 }
 
 .stickers {
