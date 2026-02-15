@@ -12,8 +12,11 @@ services:
       - "80"
     restart: always
     networks:
-      - npm_default
+      - npm_public
+      - rubic-net
 
 networks:
-  npm_default:
+  npm_public:
     external: true
+  rubic-net:
+    driver: bridge
