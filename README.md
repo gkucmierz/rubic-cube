@@ -12,4 +12,18 @@ Każdy push do gałęzi `main` automatycznie:
 2. Zatrzymuje i usuwa stare kontenery.
 3. Buduje i uruchamia nową wersję aplikacji przy użyciu `docker compose up -d --build`.
 
-Aplikacja dostępna jest na porcie **8083**.
+### Konfiguracja Nginx Proxy Manager
+
+Aplikacja nie wystawia publicznie żadnych portów. Komunikacja odbywa się wewnątrz sieci Dockerowej `npm_default`.
+
+W panelu Nginx Proxy Manager skonfiguruj Proxy Host:
+*   **Scheme:** `http`
+*   **Forward Hostname / IP:** `rubic-cube` (nazwa serwisu z docker-compose)
+*   **Forward Port:** `80`
+*   **Network:** Upewnij się, że Nginx Proxy Manager jest w sieci `npm_default`.
+
+**Uwaga:** Przed pierwszym uruchomieniem upewnij się, że sieć `npm_default` istnieje na serwerze:
+```bash
+docker network create npm_default
+```
+(lub użyj nazwy sieci, w której znajduje się Twój kontener Nginx Proxy Managera).
