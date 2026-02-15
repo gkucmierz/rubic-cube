@@ -95,10 +95,10 @@ const cubeStyle = computed(() => ({
 }
 
 .container {
-  width: 200px;
-  height: 200px;
-  perspective: 600px;
-  margin: 60px auto;
+  width: 300px;
+  height: 300px;
+  perspective: 900px;
+  margin: 90px auto;
   cursor: grab;
   user-select: none;
 }
@@ -109,16 +109,16 @@ const cubeStyle = computed(() => ({
 
 .cube {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   transform-style: preserve-3d;
 }
 
 .face {
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   background: #000;
-  padding: 6px;
+  padding: 9px;
   box-sizing: border-box;
   position: absolute;
   opacity: 0.9;
@@ -128,7 +128,7 @@ const cubeStyle = computed(() => ({
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  gap: 6px;
+  gap: 9px;
   width: 100%;
   height: 100%;
 }
@@ -137,7 +137,7 @@ const cubeStyle = computed(() => ({
   width: 100%;
   height: 100%;
   background: var(--sticker-color);
-  border-radius: 6px;
+  border-radius: 9px;
 }
 
 .top { --sticker-color: #ffffff; }
@@ -148,27 +148,27 @@ const cubeStyle = computed(() => ({
 .right { --sticker-color: #ff5800; }
 
 .front {
-  transform: translateZ(100px);
+  transform: translateZ(150px);
 }
 
 .back {
-  transform: translateZ(-100px) rotateY(180deg);
+  transform: translateZ(-150px) rotateY(180deg);
 }
 
 .left {
-  transform: translateX(-100px) rotateY(-90deg);
+  transform: translateX(-150px) rotateY(-90deg);
 }
 
 .right {
-  transform: translateX(100px) rotateY(90deg);
+  transform: translateX(150px) rotateY(90deg);
 }
 
 .top {
-  transform: translateY(-100px) rotateX(90deg);
+  transform: translateY(-150px) rotateX(90deg);
 }
 
 .bottom {
-  transform: translateY(100px) rotateX(-90deg);
+  transform: translateY(150px) rotateX(-90deg);
 }
 
 </style>
