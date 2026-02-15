@@ -5,10 +5,18 @@ import { useCube } from '../composables/useCube'
 const { cubeState, initCube, rotateLayer, COLOR_MAP } = useCube()
 
 const getFaceColors = (faceName) => {
-  if (!cubeState.value || !cubeState.value[faceName]) return Array(9).fill('gray');
+  if (!cubeState.value || !cubeState.value[faceName]) {
+    // Return placeholder colors if state is not ready
+    return Array(9).fill('#333');
+  }
   // cubeState.value[faceName] is a 3x3 matrix.
   // We need to flatten it.
-  return cubeState.value[faceName].flat().map(c => COLOR_MAP[c]);
+  try {
+    return cubeState.value[faceName].flat().map(c => COLOR_MAP[c] || 'gray');
+  } catch (e) {
+    console.error('Error mapping face colors', e);
+    return Array(9).fill('red'); // Error state
+  }
 };
 
 // ...ref(25)

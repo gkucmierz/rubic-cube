@@ -1,4 +1,4 @@
-import { mod } from '@gkucmierz/utils';
+const mod = (n, m) => ((n % m) + m) % m;
 
 // Enum for colors/faces
 export const COLORS = {
