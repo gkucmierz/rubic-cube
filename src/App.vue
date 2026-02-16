@@ -2,14 +2,18 @@
 import CubeCSS from './components/renderers/CubeCSS.vue'
 import DebugPanel from './components/DebugPanel.vue'
 import InteractionReplay from './components/InteractionReplay.vue'
+import NavBar from './components/NavBar.vue'
+import Footer from './components/Footer.vue'
 </script>
 
 <template>
+  <NavBar />
   <div class="app-content">
     <DebugPanel />
     <InteractionReplay />
     <CubeCSS />
   </div>
+  <Footer />
 </template>
 
 <style scoped>

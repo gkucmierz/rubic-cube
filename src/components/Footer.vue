@@ -1,11 +1,12 @@
 <script setup>
 const currentYear = new Date().getFullYear();
+const version = __APP_VERSION__;
 </script>
 
 <template>
   <footer class="app-footer glass-panel">
     <div class="footer-content">
-      <p>&copy; {{ currentYear }} Rubic Cube. Wersja 0.0.1</p>
+      <p>&copy; {{ currentYear }} Rubic Cube. Wersja {{ version }}</p>
       <div class="social-links">
         <!-- Placeholder for social links if needed -->
       </div>

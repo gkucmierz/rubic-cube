@@ -64,7 +64,7 @@ ${report}
 <style scoped>
 .interaction-replay {
   position: fixed;
-  bottom: 10px;
+  bottom: 50px;
   right: 10px;
   z-index: 10000;
   font-family: monospace;

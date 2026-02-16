@@ -56,7 +56,7 @@ const toggle = () => isOpen.value = !isOpen.value
 <style scoped>
 .debug-panel {
   position: fixed;
-  top: 10px;
+  top: 70px;
   right: 10px;
   width: 250px;
   background: rgba(0, 0, 0, 0.85);
