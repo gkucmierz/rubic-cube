@@ -1,17 +1,15 @@
 <script setup>
-import Main from './components/Main.vue'
-import NavBar from './components/NavBar.vue'
-import Footer from './components/Footer.vue'
+import CubeCSS from './components/renderers/CubeCSS.vue'
+import DebugPanel from './components/DebugPanel.vue'
+import InteractionReplay from './components/InteractionReplay.vue'
 </script>
 
 <template>
-  <NavBar />
-  
-  <main class="app-content">
-    <Main />
-  </main>
-
-  <Footer />
+  <div class="app-content">
+    <DebugPanel />
+    <InteractionReplay />
+    <CubeCSS />
+  </div>
 </template>
 
 <style scoped>
@@ -24,5 +22,7 @@ import Footer from './components/Footer.vue'
   padding: 2rem 0;
   position: relative;
   z-index: 1;
+  user-select: none;
+  -webkit-user-select: none;
 }
 </style>
