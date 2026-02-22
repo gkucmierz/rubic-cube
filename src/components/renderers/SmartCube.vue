@@ -472,7 +472,7 @@ onUnmounted(() => {
           <div v-for="(color, face) in c.faces" :key="face"
                class="sticker"
                :class="[face, color]"
-               :style="{ opacity: isCubeTranslucent ? 0.5 : 1 }"
+               :style="{ opacity: isCubeTranslucent ? 0.3 : 1 }"
                :data-id="c.id"
                :data-face="face">
           </div>
