@@ -4,7 +4,7 @@ import { useCube } from '../../composables/useCube'
 import { useSettings } from '../../composables/useSettings'
 import Line3D from '../common/Line3D.vue'
 
-const { cubies, initCube, rotateLayer, FACES } = useCube()
+const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
 const { showProjections } = useSettings()
 
 // --- Visual State ---
@@ -426,6 +426,26 @@ const getProjectionStyle = (c, face) => {
   return { transform: `translate3d(${x}px, ${y}px, 0px)` }
 }
 
+const applyMove = (move) => {
+  let base = move
+  let isPrime = false
+  let turns = 1
+
+  if (move.endsWith('2')) {
+    turns = 2
+    base = move[0]
+  } else if (move.endsWith('-prime')) {
+    isPrime = true
+    base = move[0]
+  }
+
+  const notation = isPrime ? `${base}'` : base
+
+  for (let i = 0; i < turns; i += 1) {
+    turn(notation)
+  }
+}
+
 onMounted(() => {
   initCube()
   window.addEventListener('mousemove', onMouseMove)
@@ -495,6 +515,24 @@ onUnmounted(() => {
       </div>
 
     </div>
+
+    <div class="controls">
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('U')">U</button>
+        <button class="btn-neon move-btn" @click="applyMove('U-prime')">U'</button>
+        <button class="btn-neon move-btn" @click="applyMove('U2')">U2</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('L')">L</button>
+        <button class="btn-neon move-btn" @click="applyMove('L-prime')">L'</button>
+        <button class="btn-neon move-btn" @click="applyMove('L2')">L2</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('F')">F</button>
+        <button class="btn-neon move-btn" @click="applyMove('F-prime')">F'</button>
+        <button class="btn-neon move-btn" @click="applyMove('F2')">F2</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -529,6 +567,29 @@ onUnmounted(() => {
   margin-left: -50px;
   margin-top: -50px;
   transform-style: preserve-3d;
+}
+
+.controls {
+  position: absolute;
+  top: 96px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+}
+
+.controls-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.move-btn {
+  min-width: 44px;
+  height: 36px;
+  font-size: 0.9rem;
+  padding: 0 10px;
 }
 
 /* Projection Styles */

@@ -54,7 +54,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
-  height: 60px;
+  height: 70px;
   width: 100%;
   box-sizing: border-box;
   position: absolute;

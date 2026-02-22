@@ -35,6 +35,10 @@ export function useCube() {
     worker.postMessage({ type: 'ROTATE_LAYER', payload: { axis, index, direction } });
   };
 
+  const turn = (move) => {
+    worker.postMessage({ type: 'TURN', payload: { move } });
+  };
+
   const validate = () => {
     worker.postMessage({ type: 'VALIDATE' });
   };
@@ -45,6 +49,7 @@ export function useCube() {
     validationResult: computed(() => validationResult.value),
     initCube,
     rotateLayer,
+    turn,
     validate,
     COLORS,
     FACES

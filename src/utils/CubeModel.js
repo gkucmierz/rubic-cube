@@ -191,16 +191,16 @@ export class CubeModel {
         cubie.faces[FACES.FRONT] = f[FACES.RIGHT];
       }
     } else if (axis === 'z') {
-      if (direction === 1) { // Up -> Right -> Down -> Left -> Up (CW)
-        cubie.faces[FACES.RIGHT] = f[FACES.UP];
-        cubie.faces[FACES.DOWN] = f[FACES.RIGHT];
-        cubie.faces[FACES.LEFT] = f[FACES.DOWN];
-        cubie.faces[FACES.UP] = f[FACES.LEFT];
-      } else { // Up -> Left -> Down -> Right -> Up (CCW)
+      if (direction === 1) { // CCW: Up -> Left -> Down -> Right -> Up
         cubie.faces[FACES.LEFT] = f[FACES.UP];
         cubie.faces[FACES.DOWN] = f[FACES.LEFT];
         cubie.faces[FACES.RIGHT] = f[FACES.DOWN];
         cubie.faces[FACES.UP] = f[FACES.RIGHT];
+      } else { // CW: Up -> Right -> Down -> Left -> Up
+        cubie.faces[FACES.RIGHT] = f[FACES.UP];
+        cubie.faces[FACES.DOWN] = f[FACES.RIGHT];
+        cubie.faces[FACES.LEFT] = f[FACES.DOWN];
+        cubie.faces[FACES.UP] = f[FACES.LEFT];
       }
     }
   }

@@ -29,11 +29,19 @@ self.onmessage = (e) => {
       sendUpdate();
       break;
 
-    case 'ROTATE_LAYER':
+    case 'ROTATE_LAYER': {
       const { axis, index, direction } = payload;
       cube.rotateLayer(axis, index, direction);
       sendUpdate();
       break;
+    }
+
+    case 'TURN': {
+      const { move } = payload;
+      cube.applyTurn(move);
+      sendUpdate();
+      break;
+    }
 
     case 'VALIDATE':
       const validation = cube.validate();
