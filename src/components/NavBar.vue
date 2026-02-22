@@ -1,9 +1,9 @@
 <script setup>
-import { Sun, Moon, Layers } from 'lucide-vue-next';
+import { Sun, Moon, Layers, Grid2x2 } from 'lucide-vue-next';
 import { ref, onMounted } from 'vue';
 import { useSettings } from '../composables/useSettings';
 
-const { showProjections, toggleProjections } = useSettings();
+const { showProjections, toggleProjections, isCubeTranslucent, toggleCubeTranslucent } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
@@ -37,6 +37,16 @@ onMounted(() => {
       <!-- Projections Toggle -->
       <button class="btn-neon nav-btn icon-only" @click="toggleProjections" :title="showProjections ? 'Ukryj rzuty' : 'Pokaż rzuty'" :class="{ active: showProjections }">
         <Layers :size="20" />
+      </button>
+
+      <!-- Cube Opacity Toggle -->
+      <button
+        class="btn-neon nav-btn icon-only"
+        @click="toggleCubeTranslucent"
+        :title="isCubeTranslucent ? 'Wyłącz przezroczystość kostki' : 'Włącz przezroczystość kostki'"
+        :class="{ active: isCubeTranslucent }"
+      >
+        <Grid2x2 :size="20" />
       </button>
 
       <!-- Theme Toggle -->

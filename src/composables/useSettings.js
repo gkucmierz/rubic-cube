@@ -10,6 +10,16 @@ try {
 
 const showProjections = ref(initialShowProjections);
 
+let initialCubeTranslucent = false;
+try {
+  const stored = localStorage.getItem('cubeTranslucent');
+  if (stored !== null) {
+    initialCubeTranslucent = stored === 'true';
+  }
+} catch (e) {}
+
+const isCubeTranslucent = ref(initialCubeTranslucent);
+
 export function useSettings() {
   const toggleProjections = () => {
     showProjections.value = !showProjections.value;
@@ -18,8 +28,17 @@ export function useSettings() {
     } catch (e) {}
   };
 
+  const toggleCubeTranslucent = () => {
+    isCubeTranslucent.value = !isCubeTranslucent.value;
+    try {
+      localStorage.setItem('cubeTranslucent', String(isCubeTranslucent.value));
+    } catch (e) {}
+  };
+
   return {
     showProjections,
-    toggleProjections
+    toggleProjections,
+    isCubeTranslucent,
+    toggleCubeTranslucent
   };
 }

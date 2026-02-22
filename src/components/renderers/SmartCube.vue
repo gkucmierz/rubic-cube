@@ -5,7 +5,7 @@ import { useSettings } from '../../composables/useSettings'
 import Line3D from '../common/Line3D.vue'
 
 const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
-const { showProjections } = useSettings()
+const { showProjections, isCubeTranslucent } = useSettings()
 
 // --- Visual State ---
 const rx = ref(-25) // Initial View Rotation X
@@ -472,6 +472,7 @@ onUnmounted(() => {
           <div v-for="(color, face) in c.faces" :key="face"
                class="sticker"
                :class="[face, color]"
+               :style="{ opacity: isCubeTranslucent ? 0.5 : 1 }"
                :data-id="c.id"
                :data-face="face">
           </div>
