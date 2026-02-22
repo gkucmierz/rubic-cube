@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useCube } from '../../composables/useCube'
 import { useSettings } from '../../composables/useSettings'
 import Line3D from '../common/Line3D.vue'
@@ -29,6 +29,7 @@ const selectedFace = ref(null)  // 'front', 'up', etc.
 const activeLayer = ref(null)   // { axis, index, tangent, direction }
 const currentLayerRotation = ref(0) // Visual rotation in degrees
 const isAnimating = ref(false)
+const pendingLogicalUpdate = ref(false)
 
 // --- Constants & Helpers ---
 
@@ -344,24 +345,17 @@ const snapRotation = () => {
   requestAnimationFrame(animate)
 }
 
-const finishMove = (steps) => {
+const finishMove = (steps, directionOverride = null) => {
   if (steps !== 0 && activeLayer.value) {
     const { axis, index } = activeLayer.value
-    // Logic Call
     const count = Math.abs(steps)
-    const direction = steps > 0 ? 1 : -1
+    const direction = directionOverride !== null ? directionOverride : (steps > 0 ? 1 : -1)
 
+    pendingLogicalUpdate.value = true
     for (let i = 0; i < count; i++) {
       rotateLayer(axis, index, direction)
     }
   }
-
-  // Reset
-  activeLayer.value = null
-  currentLayerRotation.value = 0
-  isAnimating.value = false
-  selectedCubie.value = null
-  selectedFace.value = null
 }
 
 const getCubieStyle = (c) => {
@@ -426,25 +420,90 @@ const getProjectionStyle = (c, face) => {
   return { transform: `translate3d(${x}px, ${y}px, 0px)` }
 }
 
+const animateProgrammaticMove = (base, modifier) => {
+  if (isAnimating.value || activeLayer.value) return
+
+  // Map base move to axis/index (same warstwa jak przy dragowaniu)
+  let axis = 'y'
+  let index = 1
+  if (base === 'U') {
+    axis = 'y'; index = 1
+  } else if (base === 'D') {
+    axis = 'y'; index = -1
+  } else if (base === 'L') {
+    axis = 'x'; index = -1
+  } else if (base === 'R') {
+    axis = 'x'; index = 1
+  } else if (base === 'F') {
+    axis = 'z'; index = 1
+  } else if (base === 'B') {
+    axis = 'z'; index = -1
+  }
+
+  // Kierunek zgodny z RubiksJSModel.rotateLayer:
+  // dir === 1 -> ruch z apostrofem, dir === -1 -> ruch podstawowy (bez apostrofu)
+  const count = modifier === '2' ? 2 : 1
+  const direction = modifier === "'" ? 1 : -1
+
+  activeLayer.value = {
+    axis,
+    index,
+    tangent: { x: 1, y: 0 }
+  }
+  currentLayerRotation.value = 0
+  isAnimating.value = true
+
+  const logicalSteps = direction * count
+  let visualSteps = logicalSteps
+  if (axis === 'z') visualSteps = -visualSteps
+  if (base === 'U') visualSteps = -visualSteps
+  const target = visualSteps * 90
+  const start = 0
+  const startTime = performance.now()
+  const duration = 200 * count
+
+  const animate = (time) => {
+    const p = Math.min((time - startTime) / duration, 1)
+    const ease = 1 - Math.pow(1 - p, 3)
+    currentLayerRotation.value = start + (target - start) * ease
+
+    if (p < 1) {
+      requestAnimationFrame(animate)
+    } else {
+      pendingLogicalUpdate.value = true
+      for (let i = 0; i < count; i += 1) {
+        rotateLayer(axis, index, direction)
+      }
+    }
+  }
+
+  requestAnimationFrame(animate)
+}
+
 const applyMove = (move) => {
   let base = move
-  let isPrime = false
-  let turns = 1
+  let modifier = ''
 
   if (move.endsWith('2')) {
-    turns = 2
+    modifier = '2'
     base = move[0]
   } else if (move.endsWith('-prime')) {
-    isPrime = true
+    modifier = "'"
     base = move[0]
   }
 
-  const notation = isPrime ? `${base}'` : base
-
-  for (let i = 0; i < turns; i += 1) {
-    turn(notation)
-  }
+  animateProgrammaticMove(base, modifier)
 }
+
+watch(cubies, () => {
+  if (!pendingLogicalUpdate.value) return
+  pendingLogicalUpdate.value = false
+  activeLayer.value = null
+  currentLayerRotation.value = 0
+  isAnimating.value = false
+  selectedCubie.value = null
+  selectedFace.value = null
+})
 
 onMounted(() => {
   initCube()
