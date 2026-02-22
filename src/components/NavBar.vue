@@ -1,13 +1,16 @@
 <script setup>
-import { Sun, Moon } from 'lucide-vue-next';
+import { Sun, Moon, Layers } from 'lucide-vue-next';
 import { ref, onMounted } from 'vue';
+import { useSettings } from '../composables/useSettings';
 
+const { showProjections, toggleProjections } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
   isDark.value = dark;
   const theme = dark ? 'dark' : 'light';
   document.documentElement.dataset.theme = theme;
+  localStorage.setItem('theme', theme);
 };
 
 const toggleTheme = () => {
@@ -15,7 +18,12 @@ const toggleTheme = () => {
 };
 
 onMounted(() => {
-  setTheme(true);
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme) {
+    setTheme(savedTheme === 'dark');
+  } else {
+    setTheme(true);
+  }
 });
 </script>
 
@@ -26,6 +34,11 @@ onMounted(() => {
     </div>
 
     <div class="nav-container">
+      <!-- Projections Toggle -->
+      <button class="btn-neon nav-btn icon-only" @click="toggleProjections" :title="showProjections ? 'Ukryj rzuty' : 'Pokaż rzuty'" :class="{ active: showProjections }">
+        <Layers :size="20" />
+      </button>
+
       <!-- Theme Toggle -->
       <button class="btn-neon nav-btn icon-only" @click="toggleTheme" :title="isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny'">
         <Sun v-if="isDark" :size="20" />
@@ -86,7 +99,13 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
-.nav-btn:hover {
+.nav-btn:hover,
+.nav-btn.active {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-btn.active {
+  color: var(--color-primary);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
 </style>
