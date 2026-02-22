@@ -1,5 +1,6 @@
 services:
   rubic-cube:
+    container_name: rubic-cube
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,13 +12,8 @@ services:
     # volumes:
     #   - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      npm_public:
-        aliases:
-          - rubic-cube
-      rubic-net:
+      - npm_public
 
 networks:
   npm_public:
     external: true
-  rubic-net:
-    driver: bridge
