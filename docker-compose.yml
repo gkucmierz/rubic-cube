@@ -1,3 +1,5 @@
+name: rubic-cube
+
 services:
   rubic-cube:
     container_name: rubic-cube
