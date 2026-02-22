@@ -22,11 +22,15 @@ const version = __APP_VERSION__;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: auto;
-  background: var(--panel-bg);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--panel-border);
-  box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.1);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  /* Glass panel styles handle background/border/shadow */
+  border-radius: 0; /* Full width bar usually square corners or specific radius */
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
   color: var(--text-muted);
   box-sizing: border-box;
 }

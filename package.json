@@ -1,7 +1,7 @@
 {
   "name": "rubic-cube",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.26",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "@gkucmierz/utils": "^1.28.3",
     "lucide-vue-next": "^0.564.0",
     "matrix-js": "^1.8.0",
+    "rubiks-js": "^1.0.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {

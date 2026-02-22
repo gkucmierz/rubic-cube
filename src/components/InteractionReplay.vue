@@ -4,7 +4,7 @@ import { ref } from 'vue'
 import { useInteractionLogger } from '../composables/useInteractionLogger'
 
 const { logs, isRecording, clearLogs, getRecentLogsForAnalysis } = useInteractionLogger()
-const isOpen = ref(false)
+const isOpen = ref(true)
 const copied = ref(false)
 
 const toggle = () => isOpen.value = !isOpen.value

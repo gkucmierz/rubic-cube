@@ -5,6 +5,7 @@ import { useCube } from '../composables/useCube'
 import CubeCSS from './renderers/CubeCSS.vue'
 import CubeSVG from './renderers/CubeSVG.vue'
 import CubeCanvas from './renderers/CubeCanvas.vue'
+import CubeRubiksJS from './renderers/CubeRubiksJS.vue'
 
 const { activeRenderer, RENDERERS } = useRenderer()
 const { cubeState } = useCube()
@@ -17,6 +18,8 @@ const currentRendererComponent = computed(() => {
       return CubeSVG
     case RENDERERS.CANVAS:
       return CubeCanvas
+    case RENDERERS.RUBIKS_JS:
+      return CubeRubiksJS
     default:
       return CubeCSS
   }

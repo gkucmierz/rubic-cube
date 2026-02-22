@@ -1,7 +1,5 @@
 <script setup>
-import CubeCSS from './components/renderers/CubeCSS.vue'
-import DebugPanel from './components/DebugPanel.vue'
-import InteractionReplay from './components/InteractionReplay.vue'
+import SmartCube from './components/renderers/SmartCube.vue'
 import NavBar from './components/NavBar.vue'
 import Footer from './components/Footer.vue'
 </script>
@@ -9,9 +7,7 @@ import Footer from './components/Footer.vue'
 <template>
   <NavBar />
   <div class="app-content">
-    <DebugPanel />
-    <InteractionReplay />
-    <CubeCSS />
+    <SmartCube />
   </div>
   <Footer />
 </template>
@@ -23,7 +19,7 @@ import Footer from './components/Footer.vue'
   justify-content: center;
   align-items: center;
   width: 100%;
-  padding: 2rem 0;
+  padding: 0;
   position: relative;
   z-index: 1;
   user-select: none;
