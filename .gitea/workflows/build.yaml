@@ -1,5 +1,4 @@
 name: Deploy to Production
-run-name: Deploy to Production by @${{ github.actor }}
 
 on:
   push:
@@ -15,9 +14,6 @@ jobs:
 
       - name: Build and deploy with Docker Compose
         run: |
-          # Próba zatrzymania i usunięcia starego kontenera (ignoruje błąd jeśli nie istnieje)
+          # Sprzątaj TYLKO swój projekt
           docker compose down --remove-orphans || true
-          docker rm -f rubic-cube || true
-          
-          # Start nowej wersji
           docker compose up -d --build
