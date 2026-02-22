@@ -7,9 +7,6 @@ const version = __APP_VERSION__;
   <footer class="app-footer glass-panel">
     <div class="footer-content">
       <p>&copy; {{ currentYear }} Rubic Cube. Wersja {{ version }}</p>
-      <div class="social-links">
-        <!-- Placeholder for social links if needed -->
-      </div>
     </div>
   </footer>
 </template>
