@@ -343,7 +343,7 @@ const animateProgrammaticMove = (base, modifier) => {
   const logicalSteps = direction * count
   let visualSteps = logicalSteps
   if (axis === 'z') visualSteps = -visualSteps
-  if (base === 'U') visualSteps = -visualSteps
+  if (base === 'U' || base === 'D') visualSteps = -visualSteps
   const target = visualSteps * 90
   const start = 0
   const startTime = performance.now()
@@ -368,15 +368,61 @@ const animateProgrammaticMove = (base, modifier) => {
 }
 
 const applyMove = (move) => {
-  let base = move
+  let logicalMove = move
+
+  if (move[0] === 'F' && !move.endsWith('2')) {
+    if (move.endsWith('-prime')) {
+      logicalMove = 'F'
+    } else {
+      logicalMove = 'F-prime'
+    }
+  }
+
+  if (logicalMove[0] === 'F') {
+    logicalMove = 'B' + logicalMove.slice(1)
+  } else if (logicalMove[0] === 'B') {
+    logicalMove = 'F' + logicalMove.slice(1)
+  }
+
+  if (move[0] === 'L' && !move.endsWith('2')) {
+    if (move.endsWith('-prime')) {
+      logicalMove = 'L'
+    } else {
+      logicalMove = 'L-prime'
+    }
+  }
+
+  if (logicalMove[0] === 'R') {
+    logicalMove = 'F' + logicalMove.slice(1)
+  } else if (logicalMove[0] === 'F') {
+    logicalMove = 'R' + logicalMove.slice(1)
+  }
+
+  let mappedMove = logicalMove
+
+  if (mappedMove[0] === 'L') {
+    mappedMove = 'B' + mappedMove.slice(1)
+  } else if (mappedMove[0] === 'B') {
+    mappedMove = 'L' + mappedMove.slice(1)
+  }
+
+  let base = mappedMove
   let modifier = ''
 
-  if (move.endsWith('2')) {
+  if (mappedMove.endsWith('2')) {
     modifier = '2'
-    base = move[0]
-  } else if (move.endsWith('-prime')) {
+    base = mappedMove[0]
+  } else if (mappedMove.endsWith('-prime')) {
     modifier = "'"
-    base = move[0]
+    base = mappedMove[0]
+  }
+
+  if (base === 'D') {
+    if (modifier === '') {
+      modifier = "'"
+    } else if (modifier === "'") {
+      modifier = ''
+    }
   }
 
   animateProgrammaticMove(base, modifier)
@@ -427,21 +473,39 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="controls">
+    <div class="controls controls-left">
       <div class="controls-row">
         <button class="btn-neon move-btn" @click="applyMove('U')">U</button>
-        <button class="btn-neon move-btn" @click="applyMove('U-prime')">U'</button>
-        <button class="btn-neon move-btn" @click="applyMove('U2')">U2</button>
+        <button class="btn-neon move-btn" @click="applyMove('D')">D</button>
+        <button class="btn-neon move-btn" @click="applyMove('L')">L</button>
       </div>
       <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('L')">L</button>
+        <button class="btn-neon move-btn" @click="applyMove('U-prime')">U'</button>
+        <button class="btn-neon move-btn" @click="applyMove('D-prime')">D'</button>
         <button class="btn-neon move-btn" @click="applyMove('L-prime')">L'</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('U2')">U2</button>
+        <button class="btn-neon move-btn" @click="applyMove('D2')">D2</button>
         <button class="btn-neon move-btn" @click="applyMove('L2')">L2</button>
       </div>
+    </div>
+
+    <div class="controls controls-right">
       <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('R')">R</button>
         <button class="btn-neon move-btn" @click="applyMove('F')">F</button>
+        <button class="btn-neon move-btn" @click="applyMove('B')">B</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('R-prime')">R'</button>
         <button class="btn-neon move-btn" @click="applyMove('F-prime')">F'</button>
+        <button class="btn-neon move-btn" @click="applyMove('B-prime')">B'</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn-neon move-btn" @click="applyMove('R2')">R2</button>
         <button class="btn-neon move-btn" @click="applyMove('F2')">F2</button>
+        <button class="btn-neon move-btn" @click="applyMove('B2')">B2</button>
       </div>
     </div>
   </div>
@@ -483,11 +547,18 @@ onUnmounted(() => {
 .controls {
   position: absolute;
   top: 96px;
-  right: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 50;
+}
+
+.controls-left {
+  left: 24px;
+}
+
+.controls-right {
+  right: 24px;
 }
 
 .controls-row {
