@@ -2,10 +2,9 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useCube } from '../../composables/useCube'
 import { useSettings } from '../../composables/useSettings'
-import Line3D from '../common/Line3D.vue'
 
 const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
-const { showProjections, isCubeTranslucent } = useSettings()
+const { isCubeTranslucent } = useSettings()
 
 // --- Visual State ---
 const rx = ref(-25) // Initial View Rotation X
@@ -75,112 +74,19 @@ const project = (v) => {
   const radY = ry.value * Math.PI / 180
   const radZ = rz.value * Math.PI / 180
 
-  // 1. Rotate Z
   let x1 = v.x * Math.cos(radZ) - v.y * Math.sin(radZ)
   let y1 = v.x * Math.sin(radZ) + v.y * Math.cos(radZ)
   let z1 = v.z
 
-  // 2. Rotate Y
   let x2 = x1 * Math.cos(radY) + z1 * Math.sin(radY)
   let y2 = y1
   let z2 = -x1 * Math.sin(radY) + z1 * Math.cos(radY)
 
-  // 3. Rotate X
   let x3 = x2
   let y3 = y2 * Math.cos(radX) - z2 * Math.sin(radX)
-  // let z3 = ... (depth not needed for projection vector direction)
 
   return { x: x3, y: y3 }
 }
-
-const projectedCubies = computed(() => {
-  // Filter cubies for each face based on logical coordinates
-  // x: -1 (Left), 1 (Right)
-  // y: -1 (Down/Bottom), 1 (Up/Top)
-  // z: -1 (Back), 1 (Front)
-
-  const left = cubies.value.filter(c => Math.round(c.x) === -1)
-  const back = cubies.value.filter(c => Math.round(c.z) === -1)
-  const down = cubies.value.filter(c => Math.round(c.y) === -1)
-
-  return { left, back, down }
-})
-
-const projectionTransforms = {
-  left: { tx: -350, ty: 0, tz: 0, ry: -90 },
-  back: { tx: 0, ty: -200, tz: -350, ry: 0 },
-  down: { tx: 0, ty: 350, tz: 0, rx: 90 }
-}
-
-const projectionLines = computed(() => {
-  const lines = []
-
-  // Helper to transform point
-  const transformPoint = (p, transform) => {
-    let x = p.x, y = p.y, z = p.z
-
-    // Rotate
-    if (transform.ry) {
-      const rad = transform.ry * Math.PI / 180
-      const x0 = x, z0 = z
-      x = x0 * Math.cos(rad) + z0 * Math.sin(rad)
-      z = -x0 * Math.sin(rad) + z0 * Math.cos(rad)
-    }
-    if (transform.rx) {
-      const rad = transform.rx * Math.PI / 180
-      const y0 = y, z0 = z
-      y = y0 * Math.cos(rad) - z0 * Math.sin(rad)
-      z = y0 * Math.sin(rad) + z0 * Math.cos(rad)
-    }
-
-    // Translate
-    x += transform.tx || 0
-    y += transform.ty || 0
-    z += transform.tz || 0
-
-    return { x, y, z }
-  }
-
-  const S = 150 // Half size
-
-  // 1. Left Projection
-  {
-    const t = projectionTransforms.left
-    // Start: Left Face corners (x = -S)
-    const start = [
-      { x: -S, y: -S, z: -S }, { x: -S, y: -S, z: S },
-      { x: -S, y: S, z: -S }, { x: -S, y: S, z: S }
-    ]
-    const end = start.map(p => transformPoint(p, t))
-    start.forEach((p, i) => lines.push({ start: p, end: end[i] }))
-  }
-
-  // 2. Back Projection
-  {
-    const t = projectionTransforms.back
-    // Start: Back Face corners (z = -S)
-    const start = [
-      { x: -S, y: -S, z: -S }, { x: S, y: -S, z: -S },
-      { x: -S, y: S, z: -S }, { x: S, y: S, z: -S }
-    ]
-    const end = start.map(p => transformPoint(p, t))
-    start.forEach((p, i) => lines.push({ start: p, end: end[i] }))
-  }
-
-  // 3. Down Projection (Down Face)
-  {
-    const t = projectionTransforms.down
-    // Start: Down Face corners (y = -S)
-    const start = [
-      { x: -S, y: -S, z: -S }, { x: S, y: -S, z: -S },
-      { x: -S, y: -S, z: S }, { x: S, y: -S, z: S }
-    ]
-    const end = start.map(p => transformPoint(p, t))
-    start.forEach((p, i) => lines.push({ start: p, end: end[i] }))
-  }
-
-  return lines
-})
 
 // --- Interaction Logic ---
 
@@ -399,26 +305,7 @@ const getCubieStyle = (c) => {
   return { transform }
 }
 
-const getProjectionStyle = (c, face) => {
-  let col = 0
-  let row = 0
-
-  if (face === FACES.LEFT) {
-    col = 1 - c.z
-    row = 1 - c.y
-  } else if (face === FACES.BACK) {
-    col = 1 - c.x
-    row = 1 - c.y
-  } else if (face === FACES.DOWN) {
-    col = c.x + 1
-    row = 1 - c.z
-  }
-
-  const x = (col - 1) * SCALE
-  const y = (row - 1) * SCALE
-
-  return { transform: `translate3d(${x}px, ${y}px, 0px)` }
-}
+const getProjectionStyle = () => ({})
 
 const animateProgrammaticMove = (base, modifier) => {
   if (isAnimating.value || activeLayer.value) return
@@ -538,42 +425,6 @@ onUnmounted(() => {
 
         </div>
       </div>
-      <!-- Projections of Hidden Faces -->
-      <div v-if="showProjections" class="projections">
-        <!-- Guide Lines -->
-        <Line3D v-for="(line, i) in projectionLines" :key="'line-'+i"
-          :start="line.start" :end="line.end"
-          :color="'var(--text-strong)'"
-          :thickness="1" />
-
-        <!-- Left Face Projection -->
-        <div class="projection-group left-projection">
-          <div v-for="c in projectedCubies.left" :key="c.id"
-               class="cubie-placeholder"
-               :style="getProjectionStyle(c, FACES.LEFT)">
-            <div class="sticker" :class="c.faces.left"></div>
-          </div>
-        </div>
-
-        <!-- Back Face Projection -->
-        <div class="projection-group back-projection">
-          <div v-for="c in projectedCubies.back" :key="c.id"
-               class="cubie-placeholder"
-               :style="getProjectionStyle(c, FACES.BACK)">
-            <div class="sticker" :class="c.faces.back"></div>
-          </div>
-        </div>
-
-        <!-- Down Face Projection (Exploded View) -->
-        <div class="projection-group down-projection">
-          <div v-for="c in projectedCubies.down" :key="c.id"
-               class="cubie-placeholder"
-               :style="getProjectionStyle(c, FACES.DOWN)">
-            <div class="sticker" :class="c.faces.down"></div>
-          </div>
-        </div>
-      </div>
-
     </div>
 
     <div class="controls">

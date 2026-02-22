@@ -1,15 +1,5 @@
 import { ref } from 'vue';
 
-let initialShowProjections = false;
-try {
-  const stored = localStorage.getItem('showProjections');
-  if (stored !== null) {
-    initialShowProjections = stored === 'true';
-  }
-} catch (e) {}
-
-const showProjections = ref(initialShowProjections);
-
 let initialCubeTranslucent = false;
 try {
   const stored = localStorage.getItem('cubeTranslucent');
@@ -21,13 +11,6 @@ try {
 const isCubeTranslucent = ref(initialCubeTranslucent);
 
 export function useSettings() {
-  const toggleProjections = () => {
-    showProjections.value = !showProjections.value;
-    try {
-      localStorage.setItem('showProjections', String(showProjections.value));
-    } catch (e) {}
-  };
-
   const toggleCubeTranslucent = () => {
     isCubeTranslucent.value = !isCubeTranslucent.value;
     try {
@@ -36,8 +19,6 @@ export function useSettings() {
   };
 
   return {
-    showProjections,
-    toggleProjections,
     isCubeTranslucent,
     toggleCubeTranslucent
   };
