@@ -367,65 +367,36 @@ const animateProgrammaticMove = (base, modifier) => {
   requestAnimationFrame(animate)
 }
 
+const MOVE_MAP = {
+  'U':       { base: 'U', modifier: '' },
+  'U-prime': { base: 'U', modifier: "'" },
+  'U2':      { base: 'U', modifier: '2' },
+
+  'D':       { base: 'D', modifier: "'" },
+  'D-prime': { base: 'D', modifier: '' },
+  'D2':      { base: 'D', modifier: '2' },
+
+  'L':       { base: 'B', modifier: "'" },
+  'L-prime': { base: 'B', modifier: '' },
+  'L2':      { base: 'B', modifier: '2' },
+
+  'R':       { base: 'F', modifier: '' },
+  'R-prime': { base: 'F', modifier: "'" },
+  'R2':      { base: 'F', modifier: '2' },
+
+  'F':       { base: 'L', modifier: "'" },
+  'F-prime': { base: 'L', modifier: '' },
+  'F2':      { base: 'L', modifier: '2' },
+
+  'B':       { base: 'R', modifier: '' },
+  'B-prime': { base: 'R', modifier: "'" },
+  'B2':      { base: 'R', modifier: '2' }
+}
+
 const applyMove = (move) => {
-  let logicalMove = move
-
-  if (move[0] === 'F' && !move.endsWith('2')) {
-    if (move.endsWith('-prime')) {
-      logicalMove = 'F'
-    } else {
-      logicalMove = 'F-prime'
-    }
-  }
-
-  if (logicalMove[0] === 'F') {
-    logicalMove = 'B' + logicalMove.slice(1)
-  } else if (logicalMove[0] === 'B') {
-    logicalMove = 'F' + logicalMove.slice(1)
-  }
-
-  if (move[0] === 'L' && !move.endsWith('2')) {
-    if (move.endsWith('-prime')) {
-      logicalMove = 'L'
-    } else {
-      logicalMove = 'L-prime'
-    }
-  }
-
-  if (logicalMove[0] === 'R') {
-    logicalMove = 'F' + logicalMove.slice(1)
-  } else if (logicalMove[0] === 'F') {
-    logicalMove = 'R' + logicalMove.slice(1)
-  }
-
-  let mappedMove = logicalMove
-
-  if (mappedMove[0] === 'L') {
-    mappedMove = 'B' + mappedMove.slice(1)
-  } else if (mappedMove[0] === 'B') {
-    mappedMove = 'L' + mappedMove.slice(1)
-  }
-
-  let base = mappedMove
-  let modifier = ''
-
-  if (mappedMove.endsWith('2')) {
-    modifier = '2'
-    base = mappedMove[0]
-  } else if (mappedMove.endsWith('-prime')) {
-    modifier = "'"
-    base = mappedMove[0]
-  }
-
-  if (base === 'D') {
-    if (modifier === '') {
-      modifier = "'"
-    } else if (modifier === "'") {
-      modifier = ''
-    }
-  }
-
-  animateProgrammaticMove(base, modifier)
+  const mapping = MOVE_MAP[move]
+  if (!mapping) return
+  animateProgrammaticMove(mapping.base, mapping.modifier)
 }
 
 watch(cubies, () => {
