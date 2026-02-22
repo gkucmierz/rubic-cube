@@ -13,7 +13,7 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* --- Glassmorphism Design System (from Nonograms) --- */
-  --bg-gradient: radial-gradient(circle at center, #2b2b2b 0%, #000000 100%);
+  --bg-gradient: radial-gradient(circle at center, #444 0%, #000000 100%);
   --glass-bg: rgba(255, 255, 255, 0.1);
   --glass-border: rgba(255, 255, 255, 0.2);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
@@ -45,7 +45,7 @@
 }
 
 :root[data-theme="light"] {
-  --bg-gradient: radial-gradient(circle at center, #ffffff 0%, #e0e0e0 100%);
+  --bg-gradient: radial-gradient(circle at center, #ffffff 0%, #cccccc 100%);
   --glass-bg: rgba(255, 255, 255, 0.75);
   --glass-border: rgba(15, 23, 42, 0.12);
   --glass-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.12);
