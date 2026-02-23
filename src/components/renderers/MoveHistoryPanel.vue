@@ -119,15 +119,17 @@ onUnmounted(() => {
     <div class="moves-actions">
       <button class="queue-action" @click="openAddModal">add</button>
       <button
-        v-if="hasMoves"
         class="queue-action"
+        :class="{ 'queue-action-disabled': !hasMoves }"
+        :disabled="!hasMoves"
         @click="copyQueueToClipboard"
       >
         copy
       </button>
       <button
-        v-if="hasMoves"
         class="queue-action"
+        :class="{ 'queue-action-disabled': !hasMoves }"
+        :disabled="!hasMoves"
         @click="resetQueue"
       >
         reset
@@ -200,6 +202,12 @@ onUnmounted(() => {
   color: #fff;
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+.queue-action-disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
 }
 
 .moves-history::after {
