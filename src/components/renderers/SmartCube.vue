@@ -1,17 +1,18 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useCube } from '../../composables/useCube'
 import { useSettings } from '../../composables/useSettings'
+import { LAYER_ANIMATION_DURATION } from '../../config/animationSettings'
 
 const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
 const { isCubeTranslucent } = useSettings()
 
 // --- Visual State ---
-const rx = ref(-25) // Initial View Rotation X
-const ry = ref(45)  // Initial View Rotation Y
+const rx = ref(-25)
+const ry = ref(45)
 const rz = ref(0)
-const SCALE = 100 // Size of one cubie in px
-const GAP = 0     // Gap between cubies
+const SCALE = 100
+const GAP = 0
 
 // --- Interaction State ---
 const isDragging = ref(false)
@@ -29,6 +30,7 @@ const activeLayer = ref(null)   // { axis, index, tangent, direction }
 const currentLayerRotation = ref(0) // Visual rotation in degrees
 const isAnimating = ref(false)
 const pendingLogicalUpdate = ref(false)
+const currentMoveId = ref(null)
 
 // --- Constants & Helpers ---
 
@@ -229,10 +231,9 @@ const snapRotation = () => {
   const target = Math.round(currentLayerRotation.value / 90) * 90
   const steps = Math.round(currentLayerRotation.value / 90)
 
-  // Animation loop
   const start = currentLayerRotation.value
   const startTime = performance.now()
-  const duration = 200
+  const duration = LAYER_ANIMATION_DURATION
 
   const animate = (time) => {
     const p = Math.min((time - startTime) / duration, 1)
@@ -262,6 +263,97 @@ const finishMove = (steps, directionOverride = null) => {
       rotateLayer(axis, index, direction)
     }
   }
+}
+
+const movesHistory = ref([])
+const movesHistoryEl = ref(null)
+const samplePillEl = ref(null)
+const movesPerRow = ref(0)
+
+const displayMoves = computed(() => {
+  const list = movesHistory.value.slice()
+
+  moveQueue.forEach((q, idx) => {
+    const stepsMod = ((q.steps % 4) + 4) % 4
+    if (stepsMod === 0) return
+
+    let modifier = ''
+    if (stepsMod === 1) modifier = "'"
+    else if (stepsMod === 2) modifier = '2'
+    else if (stepsMod === 3) modifier = ''
+
+    const baseLabel = q.displayBase || q.base
+    const label = baseLabel + (modifier === "'" ? "'" : modifier === '2' ? '2' : '')
+
+    list.push({
+      id: `q-${idx}`,
+      label,
+      status: 'pending'
+    })
+  })
+
+  return list
+})
+
+const moveRows = computed(() => {
+  const perRow = movesPerRow.value || displayMoves.value.length || 1
+  const rows = []
+  const all = displayMoves.value
+  for (let i = 0; i < all.length; i += perRow) {
+    rows.push(all.slice(i, i + perRow))
+  }
+  return rows
+})
+
+const copyQueueToClipboard = async () => {
+  if (!displayMoves.value.length) return
+  const text = displayMoves.value.map(m => m.label).join(' ')
+  try {
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      try {
+        document.execCommand('copy')
+      } finally {
+        document.body.removeChild(textarea)
+      }
+    }
+  } catch (e) {
+  }
+}
+
+const setSamplePill = (el) => {
+  if (el && !samplePillEl.value) {
+    samplePillEl.value = el
+  }
+}
+
+const recalcMovesLayout = () => {
+  const container = movesHistoryEl.value
+  const pill = samplePillEl.value
+  if (!container || !pill) return
+
+  const containerWidth = container.clientWidth - 4
+  const pillWidth = pill.offsetWidth + 8
+  if (pillWidth <= 0) return
+
+  const rawCount = Math.floor(containerWidth / pillWidth)
+  const count = Math.max(1, rawCount - 1)
+  movesPerRow.value = count
+}
+
+const resetQueue = () => {
+  moveQueue.length = 0
+  movesHistory.value = []
+  currentMoveId.value = null
+  nextTick(recalcMovesLayout)
 }
 
 const getCubieStyle = (c) => {
@@ -307,6 +399,38 @@ const getCubieStyle = (c) => {
 
 const getProjectionStyle = () => ({})
 
+const moveQueue = []
+
+const dequeueMove = () => {
+  while (moveQueue.length) {
+    const next = moveQueue.shift()
+    const stepsMod = ((next.steps % 4) + 4) % 4
+    if (stepsMod === 0) continue
+
+    let modifier = ''
+    if (stepsMod === 1) modifier = "'"       // +90 (logical +1)
+    else if (stepsMod === 2) modifier = '2'  // 180 (logical -2)
+    else if (stepsMod === 3) modifier = ''   // -90 (logical -1)
+
+    return { base: next.base, modifier, displayBase: next.displayBase }
+  }
+  return null
+}
+
+const processNextMove = () => {
+  if (isAnimating.value || activeLayer.value) return
+  const next = dequeueMove()
+  if (!next) return
+
+  const baseLabel = next.displayBase || next.base
+  const label = baseLabel + (next.modifier === "'" ? "'" : next.modifier === '2' ? '2' : '')
+  const id = movesHistory.value.length
+  movesHistory.value.push({ id, label, status: 'in_progress' })
+  currentMoveId.value = id
+
+  animateProgrammaticMove(next.base, next.modifier)
+}
+
 const animateProgrammaticMove = (base, modifier) => {
   if (isAnimating.value || activeLayer.value) return
 
@@ -347,7 +471,7 @@ const animateProgrammaticMove = (base, modifier) => {
   const target = visualSteps * 90
   const start = 0
   const startTime = performance.now()
-  const duration = 200 * count
+  const duration = LAYER_ANIMATION_DURATION * count
 
   const animate = (time) => {
     const p = Math.min((time - startTime) / duration, 1)
@@ -396,29 +520,72 @@ const MOVE_MAP = {
 const applyMove = (move) => {
   const mapping = MOVE_MAP[move]
   if (!mapping) return
-  animateProgrammaticMove(mapping.base, mapping.modifier)
+
+  let delta = 0
+  if (mapping.modifier === "'") delta = 1          // logical +1
+  else if (mapping.modifier === '') delta = -1     // logical -1
+  else if (mapping.modifier === '2') delta = -2    // logical -2
+
+  const displayBase = move[0]
+
+  const last = moveQueue[moveQueue.length - 1]
+  if (last && last.base === mapping.base && last.displayBase === displayBase) {
+    last.steps += delta
+  } else {
+    moveQueue.push({ base: mapping.base, displayBase, steps: delta })
+  }
+
+  processNextMove()
+}
+
+const allMoves = Object.keys(MOVE_MAP)
+
+const scramble = () => {
+  for (let i = 0; i < 30; i += 1) {
+    const move = allMoves[Math.floor(Math.random() * allMoves.length)]
+    applyMove(move)
+  }
 }
 
 watch(cubies, () => {
   if (!pendingLogicalUpdate.value) return
   pendingLogicalUpdate.value = false
+
+  if (currentMoveId.value !== null) {
+    const idx = movesHistory.value.findIndex(m => m.id === currentMoveId.value)
+    if (idx !== -1) {
+      movesHistory.value[idx] = {
+        ...movesHistory.value[idx],
+        status: 'done'
+      }
+    }
+    currentMoveId.value = null
+  }
+
   activeLayer.value = null
   currentLayerRotation.value = 0
   isAnimating.value = false
   selectedCubie.value = null
   selectedFace.value = null
+  processNextMove()
 })
 
 onMounted(() => {
   initCube()
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('resize', recalcMovesLayout)
+  nextTick(recalcMovesLayout)
 })
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
-  // Clean up any potential animation frames? rafId is local to snapRotation, but harmless.
+  window.removeEventListener('resize', recalcMovesLayout)
+})
+
+watch(displayMoves, () => {
+  nextTick(recalcMovesLayout)
 })
 
 </script>
@@ -477,6 +644,38 @@ onUnmounted(() => {
         <button class="btn-neon move-btn" @click="applyMove('R2')">R2</button>
         <button class="btn-neon move-btn" @click="applyMove('F2')">F2</button>
         <button class="btn-neon move-btn" @click="applyMove('B2')">B2</button>
+      </div>
+    </div>
+
+    <button class="btn-neon move-btn scramble-btn" @click="scramble">
+      Scramble
+    </button>
+
+    <div class="moves-history">
+      <div class="moves-inner" ref="movesHistoryEl">
+        <div
+          v-for="(row, rowIndex) in moveRows"
+          :key="rowIndex"
+          class="moves-row"
+          :class="{ 'moves-row-justify': rowIndex < moveRows.length - 1 }"
+        >
+          <span
+            v-for="(m, idx) in row"
+            :key="m.id"
+            class="move-pill"
+            :class="{
+              'move-pill-active': m.status === 'in_progress',
+              'move-pill-pending': m.status === 'pending'
+            }"
+            :ref="rowIndex === 0 && idx === 0 ? setSamplePill : null"
+          >
+            {{ m.label }}
+          </span>
+        </div>
+      </div>
+      <div v-if="displayMoves.length" class="moves-actions">
+        <button class="queue-action" @click="copyQueueToClipboard">copy</button>
+        <button class="queue-action" @click="resetQueue">reset</button>
       </div>
     </div>
   </div>
@@ -543,6 +742,90 @@ onUnmounted(() => {
   height: 36px;
   font-size: 0.9rem;
   padding: 0 10px;
+}
+
+.scramble-btn {
+  position: absolute;
+  bottom: 72px;
+  left: 24px;
+  z-index: 50;
+}
+
+.moves-history {
+  position: absolute;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: calc(100vw - 360px);
+  overflow-x: hidden;
+  padding: 12px 12px 26px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.moves-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.moves-row {
+  display: flex;
+  column-gap: 8px;
+}
+
+.moves-row-justify {
+  justify-content: space-between;
+}
+
+.move-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.8rem;
+  color: #f0f0f0;
+  white-space: nowrap;
+}
+
+.move-pill-active {
+  background: #ffd500;
+  color: #000;
+  border-color: #ffd500;
+}
+
+.move-pill-pending {
+  opacity: 0.4;
+}
+
+.moves-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 0px;
+}
+
+.queue-action {
+  border: none;
+  background: transparent;
+  padding: 6px 6px;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.moves-history::after {
+  content: none;
+}
+
+.queue-action:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Projection Styles */

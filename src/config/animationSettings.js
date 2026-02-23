@@ -1,0 +1,1 @@
+export const LAYER_ANIMATION_DURATION = 200
