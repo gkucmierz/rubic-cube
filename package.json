@@ -11,10 +11,13 @@
   "dependencies": {
     "cubejs": "^1.3.2",
     "lucide-vue-next": "^0.564.0",
+    "toastify-js": "^1.12.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "canvas": "^3.2.1",
+    "imagetracerjs": "^1.2.6",
     "puppeteer": "^24.37.5",
     "vite": "^6.2.0"
   }

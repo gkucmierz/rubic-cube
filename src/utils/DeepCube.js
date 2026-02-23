@@ -97,6 +97,17 @@ export class DeepCube {
     return true;
   }
 
+  isSolved() {
+    // Check if permutations are identity and orientations are zero
+    for (let i = 0; i < 8; i++) {
+      if (this.cp[i] !== i || this.co[i] !== 0) return false;
+    }
+    for (let i = 0; i < 12; i++) {
+      if (this.ep[i] !== i || this.eo[i] !== 0) return false;
+    }
+    return true;
+  }
+
   static fromCubies(cubies) {
     const c2f = {
       white: "U",

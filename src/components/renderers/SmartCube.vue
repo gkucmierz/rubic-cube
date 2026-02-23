@@ -8,6 +8,7 @@ import MoveHistoryPanel from "./MoveHistoryPanel.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
 import { KociembaSolver } from "../../utils/solvers/KociembaSolver.js";
 import { BeginnerSolver } from "../../utils/solvers/BeginnerSolver.js";
+import Toastify from "toastify-js";
 
 const { cubies, initCube, rotateLayer, turn, FACES } = useCube();
 const { isCubeTranslucent } = useSettings();
@@ -757,12 +758,23 @@ const handleSolve = async (solverType) => {
   }
 
   // Already solved? (Identity check)
-  let isSolved = true;
-  for (let i = 0; i < 8; i++)
-    if (currentCube.cp[i] !== i || currentCube.co[i] !== 0) isSolved = false;
-  for (let i = 0; i < 12; i++)
-    if (currentCube.ep[i] !== i || currentCube.eo[i] !== 0) isSolved = false;
-  if (isSolved) return;
+  if (currentCube.isSolved()) {
+    Toastify({
+      text: "scramble cube first",
+      duration: 3000,
+      gravity: "top",
+      position: "center",
+      style: {
+        background: "rgba(255, 255, 255, 0.1)",
+        color: "#fff",
+        backdropFilter: "blur(8px)",
+        borderRadius: "8px",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+      },
+    }).showToast();
+    return;
+  }
 
   let solution = [];
   try {
