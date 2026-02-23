@@ -197,4 +197,8 @@ onUnmounted(() => {
 .dropdown-item:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+
+.dropdown-item:focus {
+  outline: none;
+}
 </style>
