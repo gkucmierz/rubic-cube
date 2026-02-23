@@ -236,11 +236,10 @@ const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
 }
 
 const onMouseUp = () => {
-  isDragging.value = false
-
-  if (activeLayer.value) {
+  if (isDragging.value && activeLayer.value) {
     snapRotation()
   }
+  isDragging.value = false
 }
 
 const snapRotation = () => {
@@ -256,8 +255,7 @@ const snapRotation = () => {
 
   const animate = (time) => {
     const p = Math.min((time - startTime) / duration, 1)
-    // Ease out
-    const ease = 1 - Math.pow(1 - p, 3)
+    const ease = easeInOutCubic(p)
 
     currentLayerRotation.value = start + (target - start) * ease
 
@@ -289,7 +287,7 @@ const movesHistory = ref([])
 const displayMoves = computed(() => {
   const list = movesHistory.value.slice()
 
-  moveQueue.forEach((q, idx) => {
+  moveQueue.value.forEach((q, idx) => {
     const stepsMod = ((q.steps % 4) + 4) % 4
     if (stepsMod === 0) return
 
@@ -386,7 +384,7 @@ const copyQueueToClipboard = async () => {
 }
 
 const resetQueue = () => {
-  moveQueue.length = 0
+  moveQueue.value = []
   movesHistory.value = []
   currentMoveId.value = null
 }
@@ -456,11 +454,11 @@ const getCubieStyle = (c) => {
 
 const getProjectionStyle = () => ({})
 
-const moveQueue = []
+const moveQueue = ref([])
 
 const dequeueMove = () => {
-  while (moveQueue.length) {
-    const next = moveQueue.shift()
+  while (moveQueue.value.length) {
+    const next = moveQueue.value.shift()
     const stepsMod = ((next.steps % 4) + 4) % 4
     if (stepsMod === 0) continue
 
@@ -488,6 +486,69 @@ const processNextMove = () => {
   animateProgrammaticMove(next.base, next.modifier, baseLabel)
 }
 
+const easeInOutCubic = (t) => {
+  if (t < 0.5) return 4 * t * t * t
+  return 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+// Derivative of standard easeInOutCubic for instantaneous velocity calculations
+const easeInOutCubicDerivative = (t) => {
+  if (t < 0.5) return 12 * t * t
+  return 3 * Math.pow(-2 * t + 2, 2)
+}
+
+// Custom easing function that preserves initial velocity $v_0$
+// The polynomial is $P(t) = (v_0 - 2)t^3 + (3 - 2v_0)t^2 + v_0 t$
+const cubicEaseWithInitialVelocity = (t, v0) => {
+  return (v0 - 2) * t * t * t + (3 - 2 * v0) * t * t + v0 * t
+}
+
+// Derivative of the custom easing function
+const cubicEaseWithInitialVelocityDerivative = (t, v0) => {
+  return 3 * (v0 - 2) * t * t + 2 * (3 - 2 * v0) * t + v0
+}
+
+const sampleProgrammaticAngle = (anim, time) => {
+  const p = Math.min((time - anim.startTime) / anim.duration, 1)
+  const ease = anim.v0 !== undefined
+    ? cubicEaseWithInitialVelocity(p, anim.v0)
+    : easeInOutCubic(p)
+  return anim.startRotation + (anim.targetRotation - anim.startRotation) * ease
+}
+
+// Calculate the current rotation derivative (Velocity in degrees per millisecond)
+const programmaticVelocity = (anim, time) => {
+  if (time >= anim.startTime + anim.duration) return 0
+  const p = Math.max(0, Math.min((time - anim.startTime) / anim.duration, 1))
+
+  const d_ease_dp = anim.v0 !== undefined
+    ? cubicEaseWithInitialVelocityDerivative(p, anim.v0)
+    : easeInOutCubicDerivative(p)
+
+  const totalVisualDelta = anim.targetRotation - anim.startRotation
+  // dp/dt = 1 / duration
+  // d_angle/dt = (totalVisualDelta) * (d_ease_dp) * (dp/dt)
+  return (totalVisualDelta * d_ease_dp) / anim.duration
+}
+
+const stepProgrammaticAnimation = (time) => {
+  const anim = programmaticAnimation.value
+  if (!anim) return
+  const nextRotation = sampleProgrammaticAngle(anim, time)
+  currentLayerRotation.value = nextRotation
+  if (time - anim.startTime < anim.duration) {
+    requestAnimationFrame(stepProgrammaticAnimation)
+  } else {
+    let steps = Math.abs(anim.logicalSteps)
+    const dir = anim.logicalSteps >= 0 ? 1 : -1
+    pendingLogicalUpdate.value = true
+    for (let i = 0; i < steps; i += 1) {
+      rotateLayer(anim.axis, anim.index, dir)
+    }
+    programmaticAnimation.value = null
+  }
+}
+
 const animateProgrammaticMove = (base, modifier, displayBase) => {
   if (isAnimating.value || activeLayer.value) return
 
@@ -497,7 +558,7 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
   const direction = modifier === "'" ? 1 : -1
   const logicalSteps = direction * count
   const visualFactor = getVisualFactor(axis, displayBase)
-  const visualDelta = logicalSteps * visualFactor
+  const visualDelta = logicalSteps * visualFactor * 90
 
   activeLayer.value = {
     axis,
@@ -506,8 +567,9 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
   }
   isAnimating.value = true
 
-  const startRotation = currentLayerRotation.value
-  const targetRotation = startRotation + visualDelta * 90
+  currentLayerRotation.value = 0
+  const startRotation = 0
+  const targetRotation = visualDelta
 
   programmaticAnimation.value = {
     axis,
@@ -518,50 +580,10 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
     targetRotation,
     startRotation,
     startTime: performance.now(),
-    duration: LAYER_ANIMATION_DURATION * Math.max(Math.abs(visualDelta) || 1, 0.01)
+    duration: LAYER_ANIMATION_DURATION * Math.max(Math.abs(visualDelta) / 90 || 1, 0.01)
   }
 
-  const animate = (time) => {
-    const anim = programmaticAnimation.value
-    if (!anim) return
-    const p = Math.min((time - anim.startTime) / anim.duration, 1)
-    const ease = 1 - Math.pow(1 - p, 3)
-    let nextRotation = anim.startRotation + (anim.targetRotation - anim.startRotation) * ease
-
-    if (anim.targetRotation >= anim.startRotation) {
-      if (nextRotation < currentLayerRotation.value) {
-        nextRotation = currentLayerRotation.value
-      }
-    } else {
-      if (nextRotation > currentLayerRotation.value) {
-        nextRotation = currentLayerRotation.value
-      }
-    }
-
-    currentLayerRotation.value = nextRotation
-
-    console.log(
-      '[rotation-debug]',
-      'base=', anim.displayBase,
-      'axis=', anim.axis,
-            'target=', rotationDebugTarget.value,
-            'current=', rotationDebugCurrent.value
-    )
-
-    if (p < 1) {
-      requestAnimationFrame(animate)
-    } else {
-      const steps = Math.abs(anim.logicalSteps)
-      const dir = anim.logicalSteps >= 0 ? 1 : -1
-      pendingLogicalUpdate.value = true
-      for (let i = 0; i < steps; i += 1) {
-        rotateLayer(anim.axis, anim.index, dir)
-      }
-      programmaticAnimation.value = null
-    }
-  }
-
-  requestAnimationFrame(animate)
+  requestAnimationFrame(stepProgrammaticAnimation)
 }
 
 const MOVE_MAP = {
@@ -630,26 +652,44 @@ const applyMove = (move) => {
     currentAnim.axis === axis &&
     currentAnim.index === index
   ) {
-    const visualDelta = delta * visualFactor
-    const sign = Math.sign(currentAnim.targetRotation - currentLayerRotation.value || visualDelta) || 1
-    const coercedVisualDelta = coerceStepsToSign(visualDelta, sign)
-    const coercedLogicalDelta = coercedVisualDelta * visualFactor
+    const now = performance.now()
 
-    currentAnim.logicalSteps += coercedLogicalDelta
-    currentAnim.targetRotation += coercedVisualDelta * 90
-    currentAnim.startRotation = currentLayerRotation.value
-    currentAnim.startTime = performance.now()
-    const remaining = Math.abs(currentAnim.targetRotation - currentLayerRotation.value)
-    currentAnim.duration = LAYER_ANIMATION_DURATION * Math.max(remaining / 90, 0.01)
+    const currentAngle = sampleProgrammaticAngle(currentAnim, now)
+    const currentVelocity = programmaticVelocity(currentAnim, now) // degrees per ms
+
+    currentLayerRotation.value = currentAngle
+    currentAnim.logicalSteps += delta
+    const additionalVisualDelta = delta * currentAnim.visualFactor * 90
+
+    // Setup new target
+    currentAnim.startRotation = currentAngle
+    currentAnim.targetRotation += additionalVisualDelta
+    currentAnim.startTime = now
+
+    const remainingVisualDelta = currentAnim.targetRotation - currentAngle
+    // Recalculate duration based on how far we still have to go
+    currentAnim.duration = LAYER_ANIMATION_DURATION * Math.max(Math.abs(remainingVisualDelta) / 90, 0.01)
+
+    // Calculate normalized initial velocity v0
+    let v0 = 0
+    if (Math.abs(remainingVisualDelta) > 0.01) {
+       v0 = (currentVelocity * currentAnim.duration) / remainingVisualDelta
+    }
+
+    currentAnim.v0 = Math.max(-3, Math.min(3, v0))
+
+    // Format the new label instantly
+    const label = formatMoveLabel(displayBase, currentAnim.logicalSteps)
     updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps)
+
     return
   }
 
-  const last = moveQueue[moveQueue.length - 1]
+  const last = moveQueue.value[moveQueue.value.length - 1]
   if (last && last.base === mapping.base && last.displayBase === displayBase) {
     last.steps += delta
   } else {
-    moveQueue.push({ base: mapping.base, displayBase, steps: delta })
+    moveQueue.value.push({ base: mapping.base, displayBase, steps: delta })
   }
 
   processNextMove()
