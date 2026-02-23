@@ -271,6 +271,8 @@ const movesHistory = ref([])
 const movesHistoryEl = ref(null)
 const samplePillEl = ref(null)
 const movesPerRow = ref(0)
+const isAddModalOpen = ref(false)
+const addMovesText = ref('')
 
 const displayMoves = computed(() => {
   const list = movesHistory.value.slice()
@@ -372,6 +374,47 @@ const resetQueue = () => {
   movesHistory.value = []
   currentMoveId.value = null
   nextTick(recalcMovesLayout)
+}
+
+const openAddModal = () => {
+  addMovesText.value = ''
+  isAddModalOpen.value = true
+}
+
+const closeAddModal = () => {
+  isAddModalOpen.value = false
+}
+
+const handleAddMoves = () => {
+  const text = addMovesText.value || ''
+  const tokens = text.split(/\s+/).filter(Boolean)
+  const moves = []
+
+  tokens.forEach((token) => {
+    const t = token.trim()
+    if (!t) return
+    const base = t[0]
+    if (!'UDLRFB'.includes(base)) return
+    const rest = t.slice(1)
+    let key = null
+    if (rest === '') key = base
+    else if (rest === '2') key = base + '2'
+    else if (rest === "'" || rest === '’') key = base + '-prime'
+    if (key && MOVE_MAP[key]) {
+      moves.push(key)
+    }
+  })
+
+  moves.forEach((m) => applyMove(m))
+  addMovesText.value = ''
+  isAddModalOpen.value = false
+}
+
+const handleKeydown = (e) => {
+  if (e.key === 'Escape' && isAddModalOpen.value) {
+    e.preventDefault()
+    closeAddModal()
+  }
 }
 
 const getCubieStyle = (c) => {
@@ -593,6 +636,7 @@ onMounted(() => {
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('resize', recalcMovesLayout)
+  window.addEventListener('keydown', handleKeydown)
   nextTick(recalcMovesLayout)
 })
 
@@ -600,6 +644,7 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   window.removeEventListener('resize', recalcMovesLayout)
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 watch(displayMoves, () => {
@@ -691,9 +736,42 @@ watch(displayMoves, () => {
           </span>
         </div>
       </div>
-      <div v-if="displayMoves.length" class="moves-actions">
-        <button class="queue-action" @click="copyQueueToClipboard">copy</button>
-        <button class="queue-action" @click="resetQueue">reset</button>
+      <div class="moves-actions">
+        <button class="queue-action" @click="openAddModal">add</button>
+        <button
+          v-if="displayMoves.length"
+          class="queue-action"
+          @click="copyQueueToClipboard"
+        >
+          copy
+        </button>
+        <button
+          v-if="displayMoves.length"
+          class="queue-action"
+          @click="resetQueue"
+        >
+          reset
+        </button>
+      </div>
+    </div>
+    <div
+      v-if="isAddModalOpen"
+      class="moves-modal-backdrop"
+      @click.self="closeAddModal"
+    >
+      <div class="moves-modal">
+        <textarea
+          v-model="addMovesText"
+          class="moves-modal-textarea"
+        />
+        <div class="moves-modal-actions">
+          <button class="btn-neon move-btn moves-modal-button" @click="closeAddModal">
+            cancel
+          </button>
+          <button class="btn-neon move-btn moves-modal-button" @click="handleAddMoves">
+            add moves
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -838,6 +916,62 @@ watch(displayMoves, () => {
 }
 
 .queue-action:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.moves-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.moves-modal {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-color);
+  border-radius: 10px;
+  padding: 24px;
+  min-width: 480px;
+  max-width: 800px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+.moves-modal-textarea {
+  width: 100%;
+  min-height: 220px;
+  background: var(--panel-bg);
+  color: var(--text-color);
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  padding: 10px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.moves-modal-textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.moves-modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.moves-modal-button {
+  font-size: 0.85rem;
+}
+
+.moves-modal-button:focus {
   outline: none;
   box-shadow: none;
 }
