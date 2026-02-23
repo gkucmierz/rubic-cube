@@ -13,6 +13,8 @@ const ry = ref(45)
 const rz = ref(0)
 const SCALE = 100
 const GAP = 0
+const MIN_MOVES_COLUMN_GAP = 6
+const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP)
 
 // --- Interaction State ---
 const isDragging = ref(false)
@@ -340,13 +342,29 @@ const recalcMovesLayout = () => {
   const pill = samplePillEl.value
   if (!container || !pill) return
 
-  const containerWidth = container.clientWidth - 4
-  const pillWidth = pill.offsetWidth + 8
+  const containerWidth = container.clientWidth
+  const pillWidth = pill.offsetWidth
   if (pillWidth <= 0) return
 
-  const rawCount = Math.floor(containerWidth / pillWidth)
-  const count = Math.max(1, rawCount - 1)
-  movesPerRow.value = count
+  const totalWidth = (cols) => {
+    if (cols <= 0) return 0
+    if (cols === 1) return pillWidth
+    return cols * pillWidth + (cols - 1) * MIN_MOVES_COLUMN_GAP
+  }
+
+  let cols = Math.floor((containerWidth + MIN_MOVES_COLUMN_GAP) / (pillWidth + MIN_MOVES_COLUMN_GAP))
+  if (cols < 1) cols = 1
+  while (cols > 1 && totalWidth(cols) > containerWidth) {
+    cols -= 1
+  }
+
+  let gap = 0
+  if (cols > 1) {
+    gap = (containerWidth - cols * pillWidth) / (cols - 1)
+  }
+
+  movesPerRow.value = cols
+  movesColumnGap.value = gap
 }
 
 const resetQueue = () => {
@@ -657,7 +675,7 @@ watch(displayMoves, () => {
           v-for="(row, rowIndex) in moveRows"
           :key="rowIndex"
           class="moves-row"
-          :class="{ 'moves-row-justify': rowIndex < moveRows.length - 1 }"
+          :style="{ columnGap: movesColumnGap + 'px' }"
         >
           <span
             v-for="(m, idx) in row"
@@ -773,22 +791,18 @@ watch(displayMoves, () => {
 
 .moves-row {
   display: flex;
-  column-gap: 8px;
-}
-
-.moves-row-justify {
-  justify-content: space-between;
 }
 
 .move-pill {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 16px;
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   font-size: 0.8rem;
-  color: #f0f0f0;
+  color: #fff;
   white-space: nowrap;
 }
 
