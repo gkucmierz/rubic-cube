@@ -1,32 +1,33 @@
+import { Cube, FACES, COLORS } from "../src/utils/Cube.js";
+import assert from "assert";
 
-import { Cube, FACES, COLORS } from '../src/utils/Cube.js';
-import assert from 'assert';
-
-console.log('Running Cube Logic Tests...');
+console.log("Running Cube Logic Tests...");
 
 const cube = new Cube();
 
 // Helper to check a specific face color at a position
 const checkFace = (x, y, z, face, expectedColor, message) => {
-  const cubie = cube.cubies.find(c => c.x === x && c.y === y && c.z === z);
+  const cubie = cube.cubies.find((c) => c.x === x && c.y === y && c.z === z);
   if (!cubie) {
     console.error(`Cubie not found at ${x}, ${y}, ${z}`);
     return false;
   }
   const color = cubie.faces[face];
   if (color !== expectedColor) {
-    console.error(`FAIL: ${message}. Expected ${expectedColor} at ${face} of (${x},${y},${z}), got ${color}`);
+    console.error(
+      `FAIL: ${message}. Expected ${expectedColor} at ${face} of (${x},${y},${z}), got ${color}`,
+    );
     return false;
   }
   return true;
 };
 
 // Test 1: Initial State
-console.log('Test 1: Initial State');
+console.log("Test 1: Initial State");
 // Top-Front-Right corner (1, 1, 1) should have Up=White, Front=Green, Right=Red
-checkFace(1, 1, 1, FACES.UP, COLORS.WHITE, 'Initial Top-Right-Front UP');
-checkFace(1, 1, 1, FACES.FRONT, COLORS.GREEN, 'Initial Top-Right-Front FRONT');
-checkFace(1, 1, 1, FACES.RIGHT, COLORS.RED, 'Initial Top-Right-Front RIGHT');
+checkFace(1, 1, 1, FACES.UP, COLORS.WHITE, "Initial Top-Right-Front UP");
+checkFace(1, 1, 1, FACES.FRONT, COLORS.GREEN, "Initial Top-Right-Front FRONT");
+checkFace(1, 1, 1, FACES.RIGHT, COLORS.RED, "Initial Top-Right-Front RIGHT");
 
 // Test 2: Rotate Right Face (R) -> Axis X, index 1, direction -1 (based on previous mapping)
 // Wait, let's test `rotateLayer` directly first with axis 'x'.
@@ -42,13 +43,20 @@ checkFace(1, 1, 1, FACES.RIGHT, COLORS.RED, 'Initial Top-Right-Front RIGHT');
 // The UP face of the cubie now points FRONT.
 // So the cubie at (1, -1, 1) should have FRONT = WHITE.
 
-console.log('Test 2: Rotate X Axis +90 (Right Layer)');
-cube.rotateLayer('x', 1, 1);
+console.log("Test 2: Rotate X Axis +90 (Right Layer)");
+cube.rotateLayer("x", 1, 1);
 
 // Cubie originally at (1, 1, 1) [White Up] moves to (1, -1, 1).
 // Check (1, -1, 1).
 // Its Front face should be White.
-const result1 = checkFace(1, -1, 1, FACES.FRONT, COLORS.WHITE, 'After X+90: Old Up(White) should be on Front');
+const result1 = checkFace(
+  1,
+  -1,
+  1,
+  FACES.FRONT,
+  COLORS.WHITE,
+  "After X+90: Old Up(White) should be on Front",
+);
 
 // Cubie originally at (1, 1, -1) [Blue Back, White Up] (Top-Back-Right)
 // (1, 1, -1) -> (1, 1, 1). (Top-Front-Right).
@@ -68,29 +76,42 @@ const result1 = checkFace(1, -1, 1, FACES.FRONT, COLORS.WHITE, 'After X+90: Old 
 // Top (Y+) rotates to Front (Z+)?
 // Yes.
 // So the cubie at (1, 1, 1) (new position) should have FRONT = WHITE.
-const result2 = checkFace(1, 1, 1, FACES.FRONT, COLORS.WHITE, 'After X+90: Old Top-Back Up(White) should be on Front');
+const result2 = checkFace(
+  1,
+  1,
+  1,
+  FACES.FRONT,
+  COLORS.WHITE,
+  "After X+90: Old Top-Back Up(White) should be on Front",
+);
 
 if (result1 && result2) {
-    console.log('PASS: X Axis Rotation Logic seems correct (if fixed)');
+  console.log("PASS: X Axis Rotation Logic seems correct (if fixed)");
 } else {
-    console.log('FAIL: X Axis Rotation Logic is broken');
+  console.log("FAIL: X Axis Rotation Logic is broken");
 }
 
 // Reset for Y test
 cube.reset();
-console.log('Test 3: Rotate Y Axis +90 (Top Layer)');
+console.log("Test 3: Rotate Y Axis +90 (Top Layer)");
 // Top Layer (y=1).
 // Rotate Y+ (direction 1).
 // Front (z=1) -> Right (x=1).
 // Cubie at (0, 1, 1) (Front-Top-Center) [Green Front, White Up].
 // Moves to (1, 1, 0) (Right-Top-Center).
 // Its Front Face (Green) should move to Right Face.
-cube.rotateLayer('y', 1, 1);
-const resultY = checkFace(1, 1, 0, FACES.RIGHT, COLORS.GREEN, 'After Y+90: Old Front(Green) should be on Right');
+cube.rotateLayer("y", 1, 1);
+const resultY = checkFace(
+  1,
+  1,
+  0,
+  FACES.RIGHT,
+  COLORS.GREEN,
+  "After Y+90: Old Front(Green) should be on Right",
+);
 
 if (resultY) {
-    console.log('PASS: Y Axis Rotation Logic seems correct');
+  console.log("PASS: Y Axis Rotation Logic seems correct");
 } else {
-    console.log('FAIL: Y Axis Rotation Logic is broken');
+  console.log("FAIL: Y Axis Rotation Logic is broken");
 }
-

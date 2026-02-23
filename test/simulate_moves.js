@@ -1,15 +1,16 @@
-
-import { Cube, FACES, COLORS } from '../src/utils/Cube.js';
+import { Cube, FACES, COLORS } from "../src/utils/Cube.js";
 
 // Helper to print face
 const printFace = (matrix, name) => {
   console.log(`--- ${name} ---`);
-  matrix.forEach(row => console.log(row.map(c => c ? c[0].toUpperCase() : '-').join(' ')));
+  matrix.forEach((row) =>
+    console.log(row.map((c) => (c ? c[0].toUpperCase() : "-")).join(" ")),
+  );
 };
 
 // Helper to check if a face matches expected color (center color)
 const checkFaceColor = (matrix, expectedColor) => {
-  return matrix.every(row => row.every(c => c === expectedColor));
+  return matrix.every((row) => row.every((c) => c === expectedColor));
 };
 
 console.log("=== RUBIK'S CUBE SIMULATION & DIAGNOSTIC ===");
@@ -19,7 +20,7 @@ const cube = new Cube();
 // 1. Initial State Check
 console.log("\n1. Checking Initial State...");
 let state = cube.getState();
-const isSolved = 
+const isSolved =
   checkFaceColor(state[FACES.UP], COLORS.WHITE) &&
   checkFaceColor(state[FACES.DOWN], COLORS.YELLOW) &&
   checkFaceColor(state[FACES.FRONT], COLORS.GREEN) &&
@@ -52,20 +53,28 @@ console.log("\n2. Simulating: Left Layer (x=-1) Rotation (L-like move)...");
 
 // Try direction = 1
 console.log("-> Applying rotateLayer('x', -1, 1)...");
-cube.rotateLayer('x', -1, 1);
+cube.rotateLayer("x", -1, 1);
 state = cube.getState();
 
 // Check result on Left Column of Front Face
 // Front is Green. Top is White.
 // If L (Drag Down): Front-Left-Col should be White.
-const frontLeftCol = [state[FACES.FRONT][0][0], state[FACES.FRONT][1][0], state[FACES.FRONT][2][0]];
+const frontLeftCol = [
+  state[FACES.FRONT][0][0],
+  state[FACES.FRONT][1][0],
+  state[FACES.FRONT][2][0],
+];
 console.log("Front Left Column colors:", frontLeftCol);
 
-if (frontLeftCol.every(c => c === COLORS.WHITE)) {
-  console.log("✅ Result: Front got White (Top). This matches 'Drag Down' (L move).");
+if (frontLeftCol.every((c) => c === COLORS.WHITE)) {
+  console.log(
+    "✅ Result: Front got White (Top). This matches 'Drag Down' (L move).",
+  );
   console.log("=> CONCLUSION: direction=1 corresponds to Drag Down (L).");
-} else if (frontLeftCol.every(c => c === COLORS.YELLOW)) {
-  console.log("⚠️ Result: Front got Yellow (Down). This matches 'Drag Up' (L' move).");
+} else if (frontLeftCol.every((c) => c === COLORS.YELLOW)) {
+  console.log(
+    "⚠️ Result: Front got Yellow (Down). This matches 'Drag Up' (L' move).",
+  );
   console.log("=> CONCLUSION: direction=1 corresponds to Drag Up (L').");
 } else {
   console.error("❌ Unexpected colors:", frontLeftCol);
@@ -89,7 +98,7 @@ cube.reset();
 console.log("\n3. Simulating: Top Layer (y=1) Rotation...");
 // Try direction = 1
 console.log("-> Applying rotateLayer('y', 1, 1)...");
-cube.rotateLayer('y', 1, 1);
+cube.rotateLayer("y", 1, 1);
 state = cube.getState();
 
 // Check result on Top Row of Front Face
@@ -104,10 +113,10 @@ state = cube.getState();
 const frontTopRow = state[FACES.FRONT][0];
 console.log("Front Top Row colors:", frontTopRow);
 
-if (frontTopRow.every(c => c === COLORS.ORANGE)) {
+if (frontTopRow.every((c) => c === COLORS.ORANGE)) {
   console.log("✅ Result: Front got Orange (Left). This matches 'Drag Right'.");
   console.log("=> CONCLUSION: direction=1 corresponds to Drag Right.");
-} else if (frontTopRow.every(c => c === COLORS.RED)) {
+} else if (frontTopRow.every((c) => c === COLORS.RED)) {
   console.log("⚠️ Result: Front got Red (Right). This matches 'Drag Left'.");
   console.log("=> CONCLUSION: direction=1 corresponds to Drag Left.");
 } else {

@@ -1,7 +1,7 @@
 <script setup>
-import SmartCube from './components/renderers/SmartCube.vue'
-import NavBar from './components/NavBar.vue'
-import Footer from './components/Footer.vue'
+import SmartCube from "./components/renderers/SmartCube.vue";
+import NavBar from "./components/NavBar.vue";
+import Footer from "./components/Footer.vue";
 </script>
 
 <template>

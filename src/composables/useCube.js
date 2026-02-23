@@ -1,9 +1,11 @@
-
-import { ref, computed } from 'vue';
-import { COLORS, FACES } from '../utils/CubeModel';
+import { ref, computed } from "vue";
+import { COLORS, FACES } from "../utils/CubeModel";
 
 // Singleton worker
-const worker = new Worker(new URL('../workers/Cube.worker.js', import.meta.url), { type: 'module' });
+const worker = new Worker(
+  new URL("../workers/Cube.worker.js", import.meta.url),
+  { type: "module" },
+);
 
 // Reactive state
 const cubies = ref([]);
@@ -12,35 +14,37 @@ const validationResult = ref(null);
 
 worker.onmessage = (e) => {
   const { type, payload } = e.data;
-  if (type === 'STATE_UPDATE') {
+  if (type === "STATE_UPDATE") {
     cubies.value = payload.cubies;
     isReady.value = true;
-  } else if (type === 'VALIDATION_RESULT') {
+  } else if (type === "VALIDATION_RESULT") {
     validationResult.value = payload;
-  } else if (type === 'ERROR') {
-    console.error('Worker Error:', payload);
+  } else if (type === "ERROR") {
+    console.error("Worker Error:", payload);
   }
 };
 
 // Init worker
-worker.postMessage({ type: 'INIT' });
+worker.postMessage({ type: "INIT" });
 
 export function useCube() {
-
   const initCube = () => {
-    worker.postMessage({ type: 'RESET' });
+    worker.postMessage({ type: "RESET" });
   };
 
-  const rotateLayer = (axis, index, direction) => {
-    worker.postMessage({ type: 'ROTATE_LAYER', payload: { axis, index, direction } });
+  const rotateLayer = (axis, index, direction, steps = 1) => {
+    worker.postMessage({
+      type: "ROTATE_LAYER",
+      payload: { axis, index, direction, steps },
+    });
   };
 
   const turn = (move) => {
-    worker.postMessage({ type: 'TURN', payload: { move } });
+    worker.postMessage({ type: "TURN", payload: { move } });
   };
 
   const validate = () => {
-    worker.postMessage({ type: 'VALIDATE' });
+    worker.postMessage({ type: "VALIDATE" });
   };
 
   return {
@@ -52,6 +56,6 @@ export function useCube() {
     turn,
     validate,
     COLORS,
-    FACES
+    FACES,
   };
 }

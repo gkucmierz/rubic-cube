@@ -1,96 +1,99 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 
 const props = defineProps({
   moves: {
     type: Array,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const emit = defineEmits(['reset', 'copy', 'add-moves', 'open-add-modal'])
+const emit = defineEmits(["reset", "copy", "add-moves", "open-add-modal"]);
 
-const MIN_MOVES_COLUMN_GAP = 6
+const MIN_MOVES_COLUMN_GAP = 6;
 
-const movesHistoryEl = ref(null)
-const samplePillEl = ref(null)
-const movesPerRow = ref(0)
-const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP)
+const movesHistoryEl = ref(null);
+const samplePillEl = ref(null);
+const movesPerRow = ref(0);
+const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP);
 
-const displayMoves = computed(() => props.moves || [])
+const displayMoves = computed(() => props.moves || []);
 
 const moveRows = computed(() => {
-  const perRow = movesPerRow.value || displayMoves.value.length || 1
-  const rows = []
-  const all = displayMoves.value
+  const perRow = movesPerRow.value || displayMoves.value.length || 1;
+  const rows = [];
+  const all = displayMoves.value;
   for (let i = 0; i < all.length; i += perRow) {
-    rows.push(all.slice(i, i + perRow))
+    rows.push(all.slice(i, i + perRow));
   }
-  return rows
-})
+  return rows;
+});
 
-const hasMoves = computed(() => displayMoves.value.length > 0)
+const hasMoves = computed(() => displayMoves.value.length > 0);
 
 const copyQueueToClipboard = () => {
-  emit('copy')
-}
+  emit("copy");
+};
 
 const resetQueue = () => {
-  emit('reset')
-}
+  emit("reset");
+};
 
 const setSamplePill = (el) => {
   if (el && !samplePillEl.value) {
-    samplePillEl.value = el
+    samplePillEl.value = el;
   }
-}
+};
 
 const recalcMovesLayout = () => {
-  const container = movesHistoryEl.value
-  const pill = samplePillEl.value
-  if (!container || !pill) return
+  const container = movesHistoryEl.value;
+  const pill = samplePillEl.value;
+  if (!container || !pill) return;
 
-  const containerWidth = container.clientWidth
-  const pillWidth = pill.offsetWidth
-  if (pillWidth <= 0) return
+  const containerWidth = container.clientWidth;
+  const pillWidth = pill.offsetWidth;
+  if (pillWidth <= 0) return;
 
   const totalWidth = (cols) => {
-    if (cols <= 0) return 0
-    if (cols === 1) return pillWidth
-    return cols * pillWidth + (cols - 1) * MIN_MOVES_COLUMN_GAP
-  }
+    if (cols <= 0) return 0;
+    if (cols === 1) return pillWidth;
+    return cols * pillWidth + (cols - 1) * MIN_MOVES_COLUMN_GAP;
+  };
 
-  let cols = Math.floor((containerWidth + MIN_MOVES_COLUMN_GAP) / (pillWidth + MIN_MOVES_COLUMN_GAP))
-  if (cols < 1) cols = 1
+  let cols = Math.floor(
+    (containerWidth + MIN_MOVES_COLUMN_GAP) /
+      (pillWidth + MIN_MOVES_COLUMN_GAP),
+  );
+  if (cols < 1) cols = 1;
   while (cols > 1 && totalWidth(cols) > containerWidth) {
-    cols -= 1
+    cols -= 1;
   }
 
-  let gap = 0
+  let gap = 0;
   if (cols > 1) {
-    gap = (containerWidth - cols * pillWidth) / (cols - 1)
+    gap = (containerWidth - cols * pillWidth) / (cols - 1);
   }
 
-  movesPerRow.value = cols
-  movesColumnGap.value = gap
-}
+  movesPerRow.value = cols;
+  movesColumnGap.value = gap;
+};
 
 const openAddModal = () => {
-  emit('open-add-modal')
-}
+  emit("open-add-modal");
+};
 
 watch(displayMoves, () => {
-  nextTick(recalcMovesLayout)
-})
+  nextTick(recalcMovesLayout);
+});
 
 onMounted(() => {
-  window.addEventListener('resize', recalcMovesLayout)
-  nextTick(recalcMovesLayout)
-})
+  window.addEventListener("resize", recalcMovesLayout);
+  nextTick(recalcMovesLayout);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('resize', recalcMovesLayout)
-})
+  window.removeEventListener("resize", recalcMovesLayout);
+});
 </script>
 
 <template>
@@ -108,7 +111,7 @@ onUnmounted(() => {
           class="move-pill"
           :class="{
             'move-pill-active': m.status === 'in_progress',
-            'move-pill-pending': m.status === 'pending'
+            'move-pill-pending': m.status === 'pending',
           }"
           :ref="rowIndex === 0 && idx === 0 ? setSamplePill : null"
         >
@@ -135,7 +138,6 @@ onUnmounted(() => {
         reset
       </button>
     </div>
-
   </div>
 </template>
 
@@ -218,5 +220,4 @@ onUnmounted(() => {
   outline: none;
   box-shadow: none;
 }
-
 </style>

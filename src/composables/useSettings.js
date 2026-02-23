@@ -1,10 +1,10 @@
-import { ref } from 'vue';
+import { ref } from "vue";
 
 let initialCubeTranslucent = false;
 try {
-  const stored = localStorage.getItem('cubeTranslucent');
+  const stored = localStorage.getItem("cubeTranslucent");
   if (stored !== null) {
-    initialCubeTranslucent = stored === 'true';
+    initialCubeTranslucent = stored === "true";
   }
 } catch (e) {}
 
@@ -14,12 +14,12 @@ export function useSettings() {
   const toggleCubeTranslucent = () => {
     isCubeTranslucent.value = !isCubeTranslucent.value;
     try {
-      localStorage.setItem('cubeTranslucent', String(isCubeTranslucent.value));
+      localStorage.setItem("cubeTranslucent", String(isCubeTranslucent.value));
     } catch (e) {}
   };
 
   return {
     isCubeTranslucent,
-    toggleCubeTranslucent
+    toggleCubeTranslucent,
   };
 }

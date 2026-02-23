@@ -12,22 +12,22 @@
  */
 
 export const COLORS = {
-  WHITE: 'white',
-  YELLOW: 'yellow',
-  ORANGE: 'orange',
-  RED: 'red',
-  GREEN: 'green',
-  BLUE: 'blue',
-  BLACK: 'black'
+  WHITE: "white",
+  YELLOW: "yellow",
+  ORANGE: "orange",
+  RED: "red",
+  GREEN: "green",
+  BLUE: "blue",
+  BLACK: "black",
 };
 
 export const FACES = {
-  UP: 'up',
-  DOWN: 'down',
-  LEFT: 'left',
-  RIGHT: 'right',
-  FRONT: 'front',
-  BACK: 'back',
+  UP: "up",
+  DOWN: "down",
+  LEFT: "left",
+  RIGHT: "right",
+  FRONT: "front",
+  BACK: "back",
 };
 
 // Standard Face Colors (Solved State)
@@ -99,7 +99,7 @@ export class CubeModel {
    */
   rotateLayer(axis, index, direction) {
     // Determine the relevant cubies in the slice
-    const slice = this.cubies.filter(c => c[axis] === index);
+    const slice = this.cubies.filter((c) => c[axis] === index);
 
     // Coordinate rotation (Matrix Logic)
     // 90 deg CW rotation formulas:
@@ -120,7 +120,7 @@ export class CubeModel {
 
     // If direction is -1: Inverse.
 
-    slice.forEach(cubie => {
+    slice.forEach((cubie) => {
       this._rotateCubieCoordinates(cubie, axis, direction);
       this._rotateCubieFaces(cubie, axis, direction);
     });
@@ -129,7 +129,7 @@ export class CubeModel {
   _rotateCubieCoordinates(cubie, axis, direction) {
     const { x, y, z } = cubie;
 
-    if (axis === 'x') {
+    if (axis === "x") {
       if (direction === 1) {
         cubie.y = -z;
         cubie.z = y;
@@ -137,7 +137,7 @@ export class CubeModel {
         cubie.y = z;
         cubie.z = -y;
       }
-    } else if (axis === 'y') {
+    } else if (axis === "y") {
       if (direction === 1) {
         cubie.z = -x;
         cubie.x = z;
@@ -145,11 +145,13 @@ export class CubeModel {
         cubie.z = x;
         cubie.x = -z;
       }
-    } else if (axis === 'z') {
-      if (direction === 1) { // CW
+    } else if (axis === "z") {
+      if (direction === 1) {
+        // CW
         cubie.x = -y;
         cubie.y = x;
-      } else { // CCW
+      } else {
+        // CCW
         cubie.x = y;
         cubie.y = -x;
       }
@@ -165,38 +167,44 @@ export class CubeModel {
 
     const f = { ...cubie.faces };
 
-    if (axis === 'x') {
-      if (direction === 1) { // Up -> Front -> Down -> Back -> Up
+    if (axis === "x") {
+      if (direction === 1) {
+        // Up -> Front -> Down -> Back -> Up
         cubie.faces[FACES.FRONT] = f[FACES.UP];
         cubie.faces[FACES.DOWN] = f[FACES.FRONT];
         cubie.faces[FACES.BACK] = f[FACES.DOWN];
         cubie.faces[FACES.UP] = f[FACES.BACK];
         // Left/Right unchanged in position, but might rotate? No, faces are solid colors.
-      } else { // Up -> Back -> Down -> Front -> Up
+      } else {
+        // Up -> Back -> Down -> Front -> Up
         cubie.faces[FACES.BACK] = f[FACES.UP];
         cubie.faces[FACES.DOWN] = f[FACES.BACK];
         cubie.faces[FACES.FRONT] = f[FACES.DOWN];
         cubie.faces[FACES.UP] = f[FACES.FRONT];
       }
-    } else if (axis === 'y') {
-      if (direction === 1) { // Front -> Right -> Back -> Left -> Front
+    } else if (axis === "y") {
+      if (direction === 1) {
+        // Front -> Right -> Back -> Left -> Front
         cubie.faces[FACES.RIGHT] = f[FACES.FRONT];
         cubie.faces[FACES.BACK] = f[FACES.RIGHT];
         cubie.faces[FACES.LEFT] = f[FACES.BACK];
         cubie.faces[FACES.FRONT] = f[FACES.LEFT];
-      } else { // Front -> Left -> Back -> Right -> Front
+      } else {
+        // Front -> Left -> Back -> Right -> Front
         cubie.faces[FACES.LEFT] = f[FACES.FRONT];
         cubie.faces[FACES.BACK] = f[FACES.LEFT];
         cubie.faces[FACES.RIGHT] = f[FACES.BACK];
         cubie.faces[FACES.FRONT] = f[FACES.RIGHT];
       }
-    } else if (axis === 'z') {
-      if (direction === 1) { // CCW: Up -> Left -> Down -> Right -> Up
+    } else if (axis === "z") {
+      if (direction === 1) {
+        // CCW: Up -> Left -> Down -> Right -> Up
         cubie.faces[FACES.LEFT] = f[FACES.UP];
         cubie.faces[FACES.DOWN] = f[FACES.LEFT];
         cubie.faces[FACES.RIGHT] = f[FACES.DOWN];
         cubie.faces[FACES.UP] = f[FACES.RIGHT];
-      } else { // CW: Up -> Right -> Down -> Left -> Up
+      } else {
+        // CW: Up -> Right -> Down -> Left -> Up
         cubie.faces[FACES.RIGHT] = f[FACES.UP];
         cubie.faces[FACES.DOWN] = f[FACES.RIGHT];
         cubie.faces[FACES.LEFT] = f[FACES.DOWN];
@@ -208,12 +216,12 @@ export class CubeModel {
   toCubies() {
     // Return copy of state for rendering
     // CubeCSS expects array of objects with x, y, z, faces
-    return this.cubies.map(c => ({
+    return this.cubies.map((c) => ({
       id: c.id,
       x: c.x,
       y: c.y,
       z: c.z,
-      faces: { ...c.faces }
+      faces: { ...c.faces },
     }));
   }
 
@@ -238,30 +246,54 @@ export class CubeModel {
     // B (CW around -Z): 1 (since Z(1) is CW around -Z)
 
     switch (base) {
-      case 'U': direction = 1; break;
-      case 'D': direction = -1; break;
-      case 'L': direction = -1; break;
-      case 'R': direction = 1; break;
-      case 'F': direction = -1; break;
-      case 'B': direction = 1; break;
+      case "U":
+        direction = 1;
+        break;
+      case "D":
+        direction = -1;
+        break;
+      case "L":
+        direction = -1;
+        break;
+      case "R":
+        direction = 1;
+        break;
+      case "F":
+        direction = -1;
+        break;
+      case "B":
+        direction = 1;
+        break;
     }
 
     if (modifier === "'") direction *= -1;
-    if (modifier === '2') {
+    if (modifier === "2") {
       // 2 moves. Direction doesn't matter for 180, but let's keep it.
       // We will call rotateLayer twice.
     }
 
-    const count = modifier === '2' ? 2 : 1;
+    const count = modifier === "2" ? 2 : 1;
 
     for (let i = 0; i < count; i++) {
       switch (base) {
-        case 'U': this.rotateLayer('y', 1, direction); break;
-        case 'D': this.rotateLayer('y', -1, direction); break;
-        case 'L': this.rotateLayer('x', -1, direction); break;
-        case 'R': this.rotateLayer('x', 1, direction); break;
-        case 'F': this.rotateLayer('z', 1, direction); break;
-        case 'B': this.rotateLayer('z', -1, direction); break;
+        case "U":
+          this.rotateLayer("y", 1, direction);
+          break;
+        case "D":
+          this.rotateLayer("y", -1, direction);
+          break;
+        case "L":
+          this.rotateLayer("x", -1, direction);
+          break;
+        case "R":
+          this.rotateLayer("x", 1, direction);
+          break;
+        case "F":
+          this.rotateLayer("z", 1, direction);
+          break;
+        case "B":
+          this.rotateLayer("z", -1, direction);
+          break;
       }
     }
   }
@@ -282,25 +314,46 @@ export class CubeModel {
         for (let c = 0; c < 3; c++) {
           let cubie;
           // Map r,c to x,y,z based on face
-          if (face === FACES.UP) { // y=1. r=0->z=-1 (Back), r=2->z=1 (Front). c=0->x=-1 (Left).
+          if (face === FACES.UP) {
+            // y=1. r=0->z=-1 (Back), r=2->z=1 (Front). c=0->x=-1 (Left).
             // Standard U face view: Top Left is Back Left (-1, 1, -1).
             // Row 0 (Top of U face) is Back.
             // Row 2 (Bottom of U face) is Front.
-            cubie = this.cubies.find(cu => cu.y === 1 && cu.x === (c - 1) && cu.z === (r - 1)); // Wait.
+            cubie = this.cubies.find(
+              (cu) => cu.y === 1 && cu.x === c - 1 && cu.z === r - 1,
+            ); // Wait.
             // Back is z=-1. Front is z=1.
             // Visual Top of U face is Back (z=-1).
             // Visual Bottom of U face is Front (z=1).
-            cubie = this.cubies.find(cu => cu.y === 1 && cu.x === (c - 1) && cu.z === (r - 1 - 2 * r)); // Complicated.
+            cubie = this.cubies.find(
+              (cu) => cu.y === 1 && cu.x === c - 1 && cu.z === r - 1 - 2 * r,
+            ); // Complicated.
             // Let's just find by strict coordinates
             // r=0 -> z=-1. r=1 -> z=0. r=2 -> z=1.
             // c=0 -> x=-1. c=1 -> x=0. c=2 -> x=1.
-            cubie = this.cubies.find(cu => cu.y === 1 && cu.x === (c - 1) && cu.z === (r - 1));
-          }
-          else if (face === FACES.DOWN) cubie = this.cubies.find(cu => cu.y === -1 && cu.x === (c - 1) && cu.z === (1 - r)); // Down View?
-          else if (face === FACES.FRONT) cubie = this.cubies.find(cu => cu.z === 1 && cu.x === (c - 1) && cu.y === (1 - r));
-          else if (face === FACES.BACK) cubie = this.cubies.find(cu => cu.z === -1 && cu.x === (1 - c) && cu.y === (1 - r));
-          else if (face === FACES.LEFT) cubie = this.cubies.find(cu => cu.x === -1 && cu.z === (1 - c) && cu.y === (1 - r)); // Left view z order?
-          else if (face === FACES.RIGHT) cubie = this.cubies.find(cu => cu.x === 1 && cu.z === (c - 1) && cu.y === (1 - r));
+            cubie = this.cubies.find(
+              (cu) => cu.y === 1 && cu.x === c - 1 && cu.z === r - 1,
+            );
+          } else if (face === FACES.DOWN)
+            cubie = this.cubies.find(
+              (cu) => cu.y === -1 && cu.x === c - 1 && cu.z === 1 - r,
+            ); // Down View?
+          else if (face === FACES.FRONT)
+            cubie = this.cubies.find(
+              (cu) => cu.z === 1 && cu.x === c - 1 && cu.y === 1 - r,
+            );
+          else if (face === FACES.BACK)
+            cubie = this.cubies.find(
+              (cu) => cu.z === -1 && cu.x === 1 - c && cu.y === 1 - r,
+            );
+          else if (face === FACES.LEFT)
+            cubie = this.cubies.find(
+              (cu) => cu.x === -1 && cu.z === 1 - c && cu.y === 1 - r,
+            ); // Left view z order?
+          else if (face === FACES.RIGHT)
+            cubie = this.cubies.find(
+              (cu) => cu.x === 1 && cu.z === c - 1 && cu.y === 1 - r,
+            );
 
           if (cubie) {
             rowStr += cubie.faces[face][0].toUpperCase() + " ";
@@ -313,16 +366,16 @@ export class CubeModel {
       out += "\n";
     };
 
-    printFace(FACES.UP, 'U');
-    printFace(FACES.DOWN, 'D');
-    printFace(FACES.FRONT, 'F');
-    printFace(FACES.BACK, 'B');
-    printFace(FACES.LEFT, 'L');
-    printFace(FACES.RIGHT, 'R');
+    printFace(FACES.UP, "U");
+    printFace(FACES.DOWN, "D");
+    printFace(FACES.FRONT, "F");
+    printFace(FACES.BACK, "B");
+    printFace(FACES.LEFT, "L");
+    printFace(FACES.RIGHT, "R");
     return out;
   }
   scramble(n = 20) {
-    const axes = ['x', 'y', 'z'];
+    const axes = ["x", "y", "z"];
     const indices = [-1, 1]; // Usually rotate outer layers for scramble
     // Actually, scrambling usually involves random face moves (U, D, L, R, F, B)
     // U: y=1, dir -1 (Standard CW)

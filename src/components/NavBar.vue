@@ -1,16 +1,16 @@
 <script setup>
-import { Sun, Moon, Grid2x2 } from 'lucide-vue-next';
-import { ref, onMounted } from 'vue';
-import { useSettings } from '../composables/useSettings';
+import { Sun, Moon, Grid2x2 } from "lucide-vue-next";
+import { ref, onMounted } from "vue";
+import { useSettings } from "../composables/useSettings";
 
 const { isCubeTranslucent, toggleCubeTranslucent } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
   isDark.value = dark;
-  const theme = dark ? 'dark' : 'light';
+  const theme = dark ? "dark" : "light";
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem('theme', theme);
+  localStorage.setItem("theme", theme);
 };
 
 const toggleTheme = () => {
@@ -18,9 +18,9 @@ const toggleTheme = () => {
 };
 
 onMounted(() => {
-  const savedTheme = localStorage.getItem('theme');
+  const savedTheme = localStorage.getItem("theme");
   if (savedTheme) {
-    setTheme(savedTheme === 'dark');
+    setTheme(savedTheme === "dark");
   } else {
     setTheme(true);
   }
@@ -38,14 +38,22 @@ onMounted(() => {
       <button
         class="btn-neon nav-btn icon-only"
         @click="toggleCubeTranslucent"
-        :title="isCubeTranslucent ? 'Wyłącz przezroczystość kostki' : 'Włącz przezroczystość kostki'"
+        :title="
+          isCubeTranslucent
+            ? 'Wyłącz przezroczystość kostki'
+            : 'Włącz przezroczystość kostki'
+        "
         :class="{ active: isCubeTranslucent }"
       >
         <Grid2x2 :size="20" />
       </button>
 
       <!-- Theme Toggle -->
-      <button class="btn-neon nav-btn icon-only" @click="toggleTheme" :title="isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny'">
+      <button
+        class="btn-neon nav-btn icon-only"
+        @click="toggleTheme"
+        :title="isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny'"
+      >
         <Sun v-if="isDark" :size="20" />
         <Moon v-else :size="20" />
       </button>

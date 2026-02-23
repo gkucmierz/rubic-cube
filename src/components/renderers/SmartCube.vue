@@ -1,436 +1,444 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useCube } from '../../composables/useCube'
-import { useSettings } from '../../composables/useSettings'
-import { LAYER_ANIMATION_DURATION } from '../../config/animationSettings'
-import CubeMoveControls from './CubeMoveControls.vue'
-import MoveHistoryPanel from './MoveHistoryPanel.vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { useCube } from "../../composables/useCube";
+import { useSettings } from "../../composables/useSettings";
+import { LAYER_ANIMATION_DURATION } from "../../config/animationSettings";
+import CubeMoveControls from "./CubeMoveControls.vue";
+import MoveHistoryPanel from "./MoveHistoryPanel.vue";
+import { DeepCube } from "../../utils/DeepCube.js";
+import { KociembaSolver } from "../../utils/solvers/KociembaSolver.js";
+import { BeginnerSolver } from "../../utils/solvers/BeginnerSolver.js";
 
-const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
-const { isCubeTranslucent } = useSettings()
+const { cubies, initCube, rotateLayer, turn, FACES } = useCube();
+const { isCubeTranslucent } = useSettings();
 
 // --- Visual State ---
-const rx = ref(-25)
-const ry = ref(45)
-const rz = ref(0)
-const SCALE = 100
-const GAP = 0
-const MIN_MOVES_COLUMN_GAP = 6
-const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP)
+const rx = ref(-25);
+const ry = ref(45);
+const rz = ref(0);
+const SCALE = 100;
+const GAP = 0;
+const MIN_MOVES_COLUMN_GAP = 6;
+const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP);
 
 // --- Interaction State ---
-const isDragging = ref(false)
-const dragMode = ref('view') // 'view' or 'layer'
-const startX = ref(0)
-const startY = ref(0)
-const lastX = ref(0)
-const lastY = ref(0)
-const velocity = ref(0)
+const isDragging = ref(false);
+const dragMode = ref("view"); // 'view' or 'layer'
+const startX = ref(0);
+const startY = ref(0);
+const lastX = ref(0);
+const lastY = ref(0);
+const velocity = ref(0);
 
 // Layer Interaction
-const selectedCubie = ref(null) // { id, x, y, z } static snapshot at start of drag
-const selectedFace = ref(null)  // 'front', 'up', etc.
-const activeLayer = ref(null)   // { axis, index, tangent, direction }
-const currentLayerRotation = ref(0) // Visual rotation in degrees
-const isAnimating = ref(false)
-const pendingLogicalUpdate = ref(false)
-const currentMoveId = ref(null)
-const programmaticAnimation = ref(null)
+const selectedCubie = ref(null); // { id, x, y, z } static snapshot at start of drag
+const selectedFace = ref(null); // 'front', 'up', etc.
+const activeLayer = ref(null); // { axis, index, tangent, direction }
+const currentLayerRotation = ref(0); // Visual rotation in degrees
+const isAnimating = ref(false);
+const pendingLogicalUpdate = ref(false);
+const currentMoveId = ref(null);
+const programmaticAnimation = ref(null);
 
 const rotationDebugTarget = computed(() => {
-  const anim = programmaticAnimation.value
-  if (!anim) return null
-  const angle = anim.targetRotation || 0
-  return Math.round(angle)
-})
+  const anim = programmaticAnimation.value;
+  if (!anim) return null;
+  const angle = anim.targetRotation || 0;
+  return Math.round(angle);
+});
 
 const rotationDebugCurrent = computed(() => {
-  const anim = programmaticAnimation.value
-  if (!anim) return null
-  const angle = currentLayerRotation.value || 0
-  return Math.round(angle)
-})
+  const anim = programmaticAnimation.value;
+  if (!anim) return null;
+  const angle = currentLayerRotation.value || 0;
+  return Math.round(angle);
+});
 
 // --- Constants & Helpers ---
 
 const getFaceNormal = (face) => {
   const map = {
     [FACES.FRONT]: { x: 0, y: 0, z: 1 },
-    [FACES.BACK]:  { x: 0, y: 0, z: -1 },
+    [FACES.BACK]: { x: 0, y: 0, z: -1 },
     [FACES.RIGHT]: { x: 1, y: 0, z: 0 },
-    [FACES.LEFT]:  { x: -1, y: 0, z: 0 },
-    [FACES.UP]:    { x: 0, y: 1, z: 0 },
-    [FACES.DOWN]:  { x: 0, y: -1, z: 0 },
-  }
-  return map[face] || { x: 0, y: 0, z: 1 }
-}
+    [FACES.LEFT]: { x: -1, y: 0, z: 0 },
+    [FACES.UP]: { x: 0, y: 1, z: 0 },
+    [FACES.DOWN]: { x: 0, y: -1, z: 0 },
+  };
+  return map[face] || { x: 0, y: 0, z: 1 };
+};
 
 const getAllowedAxes = (face) => {
   // Logic: Which axes can this face physically move along?
-  switch(face) {
-    case FACES.FRONT: case FACES.BACK: return ['x', 'y']
-    case FACES.RIGHT: case FACES.LEFT: return ['z', 'y']
-    case FACES.UP:    case FACES.DOWN: return ['x', 'z']
+  switch (face) {
+    case FACES.FRONT:
+    case FACES.BACK:
+      return ["x", "y"];
+    case FACES.RIGHT:
+    case FACES.LEFT:
+      return ["z", "y"];
+    case FACES.UP:
+    case FACES.DOWN:
+      return ["x", "z"];
   }
-  return []
-}
+  return [];
+};
 
 const getAxisVector = (axis) => {
-  if (axis === 'x') return { x: 1, y: 0, z: 0 }
-  if (axis === 'y') return { x: 0, y: 1, z: 0 }
-  if (axis === 'z') return { x: 0, y: 0, z: 1 }
-  return { x: 0, y: 0, z: 0 }
-}
+  if (axis === "x") return { x: 1, y: 0, z: 0 };
+  if (axis === "y") return { x: 0, y: 1, z: 0 };
+  if (axis === "z") return { x: 0, y: 0, z: 1 };
+  return { x: 0, y: 0, z: 0 };
+};
 
 // Cross Product: a x b
 const cross = (a, b) => ({
   x: a.y * b.z - a.z * b.y,
   y: a.z * b.x - a.x * b.z,
-  z: a.x * b.y - a.y * b.x
-})
+  z: a.x * b.y - a.y * b.x,
+});
 
 // Project 3D vector to 2D screen space based on current view (rx, ry, rz)
 const project = (v) => {
-  const radX = rx.value * Math.PI / 180
-  const radY = ry.value * Math.PI / 180
-  const radZ = rz.value * Math.PI / 180
+  const radX = (rx.value * Math.PI) / 180;
+  const radY = (ry.value * Math.PI) / 180;
+  const radZ = (rz.value * Math.PI) / 180;
 
-  let x1 = v.x * Math.cos(radZ) - v.y * Math.sin(radZ)
-  let y1 = v.x * Math.sin(radZ) + v.y * Math.cos(radZ)
-  let z1 = v.z
+  let x1 = v.x * Math.cos(radZ) - v.y * Math.sin(radZ);
+  let y1 = v.x * Math.sin(radZ) + v.y * Math.cos(radZ);
+  let z1 = v.z;
 
-  let x2 = x1 * Math.cos(radY) + z1 * Math.sin(radY)
-  let y2 = y1
-  let z2 = -x1 * Math.sin(radY) + z1 * Math.cos(radY)
+  let x2 = x1 * Math.cos(radY) + z1 * Math.sin(radY);
+  let y2 = y1;
+  let z2 = -x1 * Math.sin(radY) + z1 * Math.cos(radY);
 
-  let x3 = x2
-  let y3 = y2 * Math.cos(radX) - z2 * Math.sin(radX)
+  let x3 = x2;
+  let y3 = y2 * Math.cos(radX) - z2 * Math.sin(radX);
 
-  return { x: x3, y: y3 }
-}
+  return { x: x3, y: y3 };
+};
 
 // --- Interaction Logic ---
 
 const onMouseDown = (e) => {
-  if (isAnimating.value) return
+  if (isAnimating.value) return;
 
-  isDragging.value = true
-  startX.value = e.clientX
-  startY.value = e.clientY
-  lastX.value = e.clientX
-  lastY.value = e.clientY
-  velocity.value = 0
+  isDragging.value = true;
+  startX.value = e.clientX;
+  startY.value = e.clientY;
+  lastX.value = e.clientX;
+  lastY.value = e.clientY;
+  velocity.value = 0;
 
-  const target = e.target.closest('.sticker')
+  const target = e.target.closest(".sticker");
   if (target) {
-    const id = parseInt(target.dataset.id)
-    const face = target.dataset.face
-    const cubie = cubies.value.find(c => c.id === id)
+    const id = parseInt(target.dataset.id);
+    const face = target.dataset.face;
+    const cubie = cubies.value.find((c) => c.id === id);
 
-    selectedCubie.value = { ...cubie } // Snapshot position
-    selectedFace.value = face
+    selectedCubie.value = { ...cubie }; // Snapshot position
+    selectedFace.value = face;
 
     // Check if center piece (has 2 zero coordinates)
     // Centers have sum of absolute coords = 1
     // Core (0,0,0) has sum = 0
-    const absSum = Math.abs(cubie.x) + Math.abs(cubie.y) + Math.abs(cubie.z)
-    const isCenterOrCore = absSum <= 1
+    const absSum = Math.abs(cubie.x) + Math.abs(cubie.y) + Math.abs(cubie.z);
+    const isCenterOrCore = absSum <= 1;
 
     // Mechanical Realism:
     // Centers are "Stiff" (part of the core frame). Dragging them rotates the View.
     // Corners/Edges are "Moving Parts". Dragging them rotates the Layer.
-    dragMode.value = isCenterOrCore ? 'view' : 'layer'
+    dragMode.value = isCenterOrCore ? "view" : "layer";
   } else {
-    dragMode.value = 'view'
-    selectedCubie.value = null
+    dragMode.value = "view";
+    selectedCubie.value = null;
   }
-}
+};
 
 const onMouseMove = (e) => {
-  if (!isDragging.value) return
+  if (!isDragging.value) return;
 
-  const dx = e.clientX - lastX.value
-  const dy = e.clientY - lastY.value
+  const dx = e.clientX - lastX.value;
+  const dy = e.clientY - lastY.value;
 
-  if (dragMode.value === 'view') {
-    ry.value += dx * 0.5
-    rx.value += dy * 0.5
-  } else if (dragMode.value === 'layer' && selectedCubie.value) {
-    const totalDx = e.clientX - startX.value
-    const totalDy = e.clientY - startY.value
+  if (dragMode.value === "view") {
+    ry.value += dx * 0.5;
+    rx.value += dy * 0.5;
+  } else if (dragMode.value === "layer" && selectedCubie.value) {
+    const totalDx = e.clientX - startX.value;
+    const totalDy = e.clientY - startY.value;
 
-    handleLayerDrag(totalDx, totalDy, dx, dy)
+    handleLayerDrag(totalDx, totalDy, dx, dy);
   }
 
-  lastX.value = e.clientX
-  lastY.value = e.clientY
-}
+  lastX.value = e.clientX;
+  lastY.value = e.clientY;
+};
 
 const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
   // If we haven't locked an axis yet
   if (!activeLayer.value) {
-    if (Math.sqrt(totalDx**2 + totalDy**2) < 5) return // Threshold
+    if (Math.sqrt(totalDx ** 2 + totalDy ** 2) < 5) return; // Threshold
 
-    const faceNormal = getFaceNormal(selectedFace.value)
-    const axes = getAllowedAxes(selectedFace.value)
+    const faceNormal = getFaceNormal(selectedFace.value);
+    const axes = getAllowedAxes(selectedFace.value);
 
-    let best = null
-    let maxDot = 0
+    let best = null;
+    let maxDot = 0;
 
     // Analyze candidates
-    axes.forEach(axis => {
+    axes.forEach((axis) => {
       // Tangent = Axis x Normal
       // This is the 3D direction of motion for Positive Rotation around this Axis
-      const t3D = cross(getAxisVector(axis), faceNormal)
-      const t2D = project(t3D)
-      const len = Math.sqrt(t2D.x**2 + t2D.y**2)
+      const t3D = cross(getAxisVector(axis), faceNormal);
+      const t2D = project(t3D);
+      const len = Math.sqrt(t2D.x ** 2 + t2D.y ** 2);
 
       if (len > 0.1) {
-        const nx = t2D.x / len
-        const ny = t2D.y / len
+        const nx = t2D.x / len;
+        const ny = t2D.y / len;
 
         // Compare with mouse drag direction
-        const mouseLen = Math.sqrt(totalDx**2 + totalDy**2)
-        const mx = totalDx / mouseLen
-        const my = totalDy / mouseLen
+        const mouseLen = Math.sqrt(totalDx ** 2 + totalDy ** 2);
+        const mx = totalDx / mouseLen;
+        const my = totalDy / mouseLen;
 
-        const dot = Math.abs(mx * nx + my * ny)
+        const dot = Math.abs(mx * nx + my * ny);
 
         if (dot > maxDot) {
-          maxDot = dot
-          best = { axis, tangent: { x: nx, y: ny } }
+          maxDot = dot;
+          best = { axis, tangent: { x: nx, y: ny } };
         }
       }
-    })
+    });
 
     if (best && maxDot > 0.5) {
       // Lock Axis
-      let index = 0
-      if (best.axis === 'x') index = selectedCubie.value.x
-      if (best.axis === 'y') index = selectedCubie.value.y
-      if (best.axis === 'z') index = selectedCubie.value.z
+      let index = 0;
+      if (best.axis === "x") index = selectedCubie.value.x;
+      if (best.axis === "y") index = selectedCubie.value.y;
+      if (best.axis === "z") index = selectedCubie.value.z;
 
       activeLayer.value = {
         axis: best.axis,
         index,
-        tangent: best.tangent
-      }
+        tangent: best.tangent,
+      };
     } else {
       // Fallback: if drag doesn't match a layer axis, maybe user wants to rotate view?
       // Only switch if drag is significant
-      if (Math.sqrt(totalDx**2 + totalDy**2) > 20) {
-         // Keep layer mode but maybe relax?
-         // No, sticky mode is better.
+      if (Math.sqrt(totalDx ** 2 + totalDy ** 2) > 20) {
+        // Keep layer mode but maybe relax?
+        // No, sticky mode is better.
       }
     }
   }
 
   // If we have an active layer, update rotation
   if (activeLayer.value) {
-    const { x, y } = activeLayer.value.tangent
+    const { x, y } = activeLayer.value.tangent;
     // Project delta onto key
-    const val = dx * x + dy * y
+    const val = dx * x + dy * y;
     // Scale factor
-    currentLayerRotation.value += val * 0.6
+    currentLayerRotation.value += val * 0.6;
   }
-}
+};
 
 const onMouseUp = () => {
   if (isDragging.value && activeLayer.value) {
-    snapRotation()
+    snapRotation();
   }
-  isDragging.value = false
-}
+  isDragging.value = false;
+};
 
 const snapRotation = () => {
-  isAnimating.value = true
+  isAnimating.value = true;
 
   // Determine nearest 90 deg
-  const target = Math.round(currentLayerRotation.value / 90) * 90
-  const steps = Math.round(currentLayerRotation.value / 90)
+  const target = Math.round(currentLayerRotation.value / 90) * 90;
+  const steps = Math.round(currentLayerRotation.value / 90);
 
-  const start = currentLayerRotation.value
-  const startTime = performance.now()
-  const duration = LAYER_ANIMATION_DURATION
+  const start = currentLayerRotation.value;
+  const startTime = performance.now();
+  const duration = LAYER_ANIMATION_DURATION;
 
   const animate = (time) => {
-    const p = Math.min((time - startTime) / duration, 1)
-    const ease = easeInOutCubic(p)
+    const p = Math.min((time - startTime) / duration, 1);
+    const ease = easeInOutCubic(p);
 
-    currentLayerRotation.value = start + (target - start) * ease
+    currentLayerRotation.value = start + (target - start) * ease;
 
     if (p < 1) {
-      requestAnimationFrame(animate)
+      requestAnimationFrame(animate);
     } else {
       // Animation done
-      finishMove(steps)
+      finishMove(steps);
     }
-  }
-  requestAnimationFrame(animate)
-}
+  };
+  requestAnimationFrame(animate);
+};
 
 const finishMove = (steps, directionOverride = null) => {
   if (steps !== 0 && activeLayer.value) {
-    const { axis, index } = activeLayer.value
-    const count = Math.abs(steps)
-    const direction = directionOverride !== null ? directionOverride : (steps > 0 ? 1 : -1)
+    const { axis, index } = activeLayer.value;
+    const count = Math.abs(steps);
+    const direction =
+      directionOverride !== null ? directionOverride : steps > 0 ? 1 : -1;
 
-    pendingLogicalUpdate.value = true
-    for (let i = 0; i < count; i++) {
-      rotateLayer(axis, index, direction)
-    }
+    pendingLogicalUpdate.value = true;
+    rotateLayer(axis, index, direction, count);
   }
-}
+};
 
-const movesHistory = ref([])
+const movesHistory = ref([]);
 
 const displayMoves = computed(() => {
-  const list = movesHistory.value.slice()
+  const list = movesHistory.value.slice();
 
   moveQueue.value.forEach((q, idx) => {
-    const stepsMod = ((q.steps % 4) + 4) % 4
-    if (stepsMod === 0) return
+    const stepsMod = ((q.steps % 4) + 4) % 4;
+    if (stepsMod === 0) return;
 
-    let modifier = ''
-    if (stepsMod === 1) modifier = "'"
-    else if (stepsMod === 2) modifier = '2'
-    else if (stepsMod === 3) modifier = ''
+    let modifier = "";
+    if (stepsMod === 1) modifier = "'";
+    else if (stepsMod === 2) modifier = "2";
+    else if (stepsMod === 3) modifier = "";
 
-    const baseLabel = q.displayBase || q.base
-    const label = baseLabel + (modifier === "'" ? "'" : modifier === '2' ? '2' : '')
+    const baseLabel = q.displayBase || q.base;
+    const label =
+      baseLabel + (modifier === "'" ? "'" : modifier === "2" ? "2" : "");
 
     list.push({
       id: `q-${idx}`,
       label,
-      status: 'pending'
-    })
-  })
+      status: "pending",
+    });
+  });
 
-  return list
-})
+  return list;
+});
 
 const getAxisIndexForBase = (base) => {
-  if (base === 'U') return { axis: 'y', index: 1 }
-  if (base === 'D') return { axis: 'y', index: -1 }
-  if (base === 'L') return { axis: 'x', index: -1 }
-  if (base === 'R') return { axis: 'x', index: 1 }
-  if (base === 'F') return { axis: 'z', index: 1 }
-  if (base === 'B') return { axis: 'z', index: -1 }
-  return { axis: 'y', index: 0 }
-}
+  if (base === "U") return { axis: "y", index: 1 };
+  if (base === "D") return { axis: "y", index: -1 };
+  if (base === "L") return { axis: "x", index: -1 };
+  if (base === "R") return { axis: "x", index: 1 };
+  if (base === "F") return { axis: "z", index: 1 };
+  if (base === "B") return { axis: "z", index: -1 };
+  return { axis: "y", index: 0 };
+};
 
 const getVisualFactor = (axis, base) => {
-  let factor = 1
-  if (axis === 'z') factor *= -1
-  if (base === 'U' || base === 'D') factor *= -1
-  return factor
-}
+  let factor = 1;
+  if (axis === "z") factor *= -1;
+  if (base === "U" || base === "D") factor *= -1;
+  return factor;
+};
 
 const coerceStepsToSign = (steps, sign) => {
-  if (steps === 0) return 0
-  const mod = ((steps % 4) + 4) % 4
+  if (steps === 0) return 0;
+  const mod = ((steps % 4) + 4) % 4;
   if (sign < 0) {
-    if (mod === 1) return -3
-    if (mod === 2) return -2
-    return -1
+    if (mod === 1) return -3;
+    if (mod === 2) return -2;
+    return -1;
   }
-  if (mod === 1) return 1
-  if (mod === 2) return 2
-  return 3
-}
+  if (mod === 1) return 1;
+  if (mod === 2) return 2;
+  return 3;
+};
 
 const formatMoveLabel = (displayBase, steps) => {
-  const stepsMod = ((steps % 4) + 4) % 4
-  if (stepsMod === 0) return displayBase
-  let modifier = ''
-  if (stepsMod === 1) modifier = "'"
-  else if (stepsMod === 2) modifier = '2'
-  else if (stepsMod === 3) modifier = ''
-  return displayBase + (modifier === "'" ? "'" : modifier === '2' ? '2' : '')
-}
+  const stepsMod = ((steps % 4) + 4) % 4;
+  if (stepsMod === 0) return displayBase;
+  let modifier = "";
+  if (stepsMod === 1) modifier = "'";
+  else if (stepsMod === 2) modifier = "2";
+  else if (stepsMod === 3) modifier = "";
+  return displayBase + (modifier === "'" ? "'" : modifier === "2" ? "2" : "");
+};
 
 const updateCurrentMoveLabel = (displayBase, steps) => {
-  if (currentMoveId.value === null) return
-  const idx = movesHistory.value.findIndex(m => m.id === currentMoveId.value)
-  if (idx === -1) return
+  if (currentMoveId.value === null) return;
+  const idx = movesHistory.value.findIndex((m) => m.id === currentMoveId.value);
+  if (idx === -1) return;
   movesHistory.value[idx] = {
     ...movesHistory.value[idx],
-    label: formatMoveLabel(displayBase, steps)
-  }
-}
+    label: formatMoveLabel(displayBase, steps),
+  };
+};
 
 const copyQueueToClipboard = async () => {
-  if (!displayMoves.value.length) return
-  const text = displayMoves.value.map(m => m.label).join(' ')
+  if (!displayMoves.value.length) return;
+  const text = displayMoves.value.map((m) => m.label).join(" ");
   try {
     if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(text);
     } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
       try {
-        document.execCommand('copy')
+        document.execCommand("copy");
       } finally {
-        document.body.removeChild(textarea)
+        document.body.removeChild(textarea);
       }
     }
-  } catch (e) {
-  }
-}
+  } catch (e) {}
+};
 
 const resetQueue = () => {
-  moveQueue.value = []
-  movesHistory.value = []
-  currentMoveId.value = null
-}
+  moveQueue.value = [];
+  movesHistory.value = [];
+  currentMoveId.value = null;
+};
 
 const handleAddMoves = (text) => {
-  const tokens = text.split(/\s+/).filter(Boolean)
-  const moves = []
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const moves = [];
 
   tokens.forEach((token) => {
-    const t = token.trim()
-    if (!t) return
-    const base = t[0]
-    if (!'UDLRFB'.includes(base)) return
-    const rest = t.slice(1)
-    let key = null
-    if (rest === '') key = base
-    else if (rest === '2') key = base + '2'
-    else if (rest === "'" || rest === '’') key = base + '-prime'
+    const t = token.trim();
+    if (!t) return;
+    const base = t[0];
+    if (!"UDLRFB".includes(base)) return;
+    const rest = t.slice(1);
+    let key = null;
+    if (rest === "") key = base;
+    else if (rest === "2") key = base + "2";
+    else if (rest === "'" || rest === "’") key = base + "-prime";
     if (key && MOVE_MAP[key]) {
-      moves.push(key)
+      moves.push(key);
     }
-  })
+  });
 
-  moves.forEach((m) => applyMove(m))
-}
+  moves.forEach((m) => applyMove(m));
+};
 
 const getCubieStyle = (c) => {
   // Base Position
-  const x = c.x * (SCALE + GAP)
-  const y = c.y * -(SCALE + GAP) // Y is up in logic, down in CSS
-  const z = c.z * (SCALE + GAP)
+  const x = c.x * (SCALE + GAP);
+  const y = c.y * -(SCALE + GAP); // Y is up in logic, down in CSS
+  const z = c.z * (SCALE + GAP);
 
-  let transform = `translate3d(${x}px, ${y}px, ${z}px)`
+  let transform = `translate3d(${x}px, ${y}px, ${z}px)`;
 
   // Apply Active Layer Rotation
   if (activeLayer.value) {
-    const { axis, index } = activeLayer.value
-    let match = false
+    const { axis, index } = activeLayer.value;
+    let match = false;
     // Match based on CURRENT LOGICAL POSITION
-    if (axis === 'x' && c.x === index) match = true
-    if (axis === 'y' && c.y === index) match = true
-    if (axis === 'z' && c.z === index) match = true
+    if (axis === "x" && c.x === index) match = true;
+    if (axis === "y" && c.y === index) match = true;
+    if (axis === "z" && c.z === index) match = true;
 
     if (match) {
       // Rotation Group around Center (0,0,0)
-      let rot = currentLayerRotation.value
+      let rot = currentLayerRotation.value;
 
       // Axis mapping for CSS
       // If we rotate a group around center, we want standard rotation.
@@ -443,133 +451,160 @@ const getCubieStyle = (c) => {
       // CSS rotateY: + is Right->Back (Spin Right).
       // CSS rotateZ: + is Top->Right (Clockwise).
 
-      if (axis === 'x') transform = `rotateX(${-rot}deg) ` + transform
-      if (axis === 'y') transform = `rotateY(${-rot}deg) ` + transform
-      if (axis === 'z') transform = `rotateZ(${rot}deg) ` + transform
+      if (axis === "x") transform = `rotateX(${-rot}deg) ` + transform;
+      if (axis === "y") transform = `rotateY(${-rot}deg) ` + transform;
+      if (axis === "z") transform = `rotateZ(${rot}deg) ` + transform;
     }
   }
 
-  return { transform }
-}
+  return { transform };
+};
 
-const getProjectionStyle = () => ({})
+const getProjectionStyle = () => ({});
 
-const moveQueue = ref([])
+const moveQueue = ref([]);
 
 const dequeueMove = () => {
   while (moveQueue.value.length) {
-    const next = moveQueue.value.shift()
-    const stepsMod = ((next.steps % 4) + 4) % 4
-    if (stepsMod === 0) continue
+    const next = moveQueue.value.shift();
+    const stepsMod = ((next.steps % 4) + 4) % 4;
+    if (stepsMod === 0) continue;
 
-    let modifier = ''
-    if (stepsMod === 1) modifier = "'"       // +90 (logical +1)
-    else if (stepsMod === 2) modifier = '2'  // 180 (logical -2)
-    else if (stepsMod === 3) modifier = ''   // -90 (logical -1)
+    let modifier = "";
+    if (stepsMod === 1)
+      modifier = "'"; // +90 (logical +1)
+    else if (stepsMod === 2)
+      modifier = "2"; // 180 (logical -2)
+    else if (stepsMod === 3) modifier = ""; // -90 (logical -1)
 
-    return { base: next.base, modifier, displayBase: next.displayBase }
+    return { base: next.base, modifier, displayBase: next.displayBase };
   }
-  return null
-}
+  return null;
+};
 
 const processNextMove = () => {
-  if (isAnimating.value || activeLayer.value) return
-  const next = dequeueMove()
-  if (!next) return
+  if (isAnimating.value || activeLayer.value) return;
+  const next = dequeueMove();
+  if (!next) return;
 
-  const baseLabel = next.displayBase || next.base
-  const label = baseLabel + (next.modifier === "'" ? "'" : next.modifier === '2' ? '2' : '')
-  const id = movesHistory.value.length
-  movesHistory.value.push({ id, label, status: 'in_progress' })
-  currentMoveId.value = id
+  const baseLabel = next.displayBase || next.base;
+  const label =
+    baseLabel +
+    (next.modifier === "'" ? "'" : next.modifier === "2" ? "2" : "");
+  const id = movesHistory.value.length;
+  movesHistory.value.push({ id, label, status: "in_progress" });
+  currentMoveId.value = id;
 
-  animateProgrammaticMove(next.base, next.modifier, baseLabel)
-}
+  animateProgrammaticMove(next.base, next.modifier, baseLabel);
+};
 
 const easeInOutCubic = (t) => {
-  if (t < 0.5) return 4 * t * t * t
-  return 1 - Math.pow(-2 * t + 2, 3) / 2
-}
+  if (t < 0.5) return 4 * t * t * t;
+  return 1 - Math.pow(-2 * t + 2, 3) / 2;
+};
 
 // Derivative of standard easeInOutCubic for instantaneous velocity calculations
 const easeInOutCubicDerivative = (t) => {
-  if (t < 0.5) return 12 * t * t
-  return 3 * Math.pow(-2 * t + 2, 2)
-}
+  if (t < 0.5) return 12 * t * t;
+  return 3 * Math.pow(-2 * t + 2, 2);
+};
 
 // Custom easing function that preserves initial velocity $v_0$
 // The polynomial is $P(t) = (v_0 - 2)t^3 + (3 - 2v_0)t^2 + v_0 t$
 const cubicEaseWithInitialVelocity = (t, v0) => {
-  return (v0 - 2) * t * t * t + (3 - 2 * v0) * t * t + v0 * t
-}
+  return (v0 - 2) * t * t * t + (3 - 2 * v0) * t * t + v0 * t;
+};
 
 // Derivative of the custom easing function
 const cubicEaseWithInitialVelocityDerivative = (t, v0) => {
-  return 3 * (v0 - 2) * t * t + 2 * (3 - 2 * v0) * t + v0
-}
+  return 3 * (v0 - 2) * t * t + 2 * (3 - 2 * v0) * t + v0;
+};
 
 const sampleProgrammaticAngle = (anim, time) => {
-  const p = Math.min((time - anim.startTime) / anim.duration, 1)
-  const ease = anim.v0 !== undefined
-    ? cubicEaseWithInitialVelocity(p, anim.v0)
-    : easeInOutCubic(p)
-  return anim.startRotation + (anim.targetRotation - anim.startRotation) * ease
-}
+  const p = Math.min((time - anim.startTime) / anim.duration, 1);
+  const ease =
+    anim.v0 !== undefined
+      ? cubicEaseWithInitialVelocity(p, anim.v0)
+      : easeInOutCubic(p);
+  return anim.startRotation + (anim.targetRotation - anim.startRotation) * ease;
+};
 
 // Calculate the current rotation derivative (Velocity in degrees per millisecond)
 const programmaticVelocity = (anim, time) => {
-  if (time >= anim.startTime + anim.duration) return 0
-  const p = Math.max(0, Math.min((time - anim.startTime) / anim.duration, 1))
+  if (time >= anim.startTime + anim.duration) return 0;
+  const p = Math.max(0, Math.min((time - anim.startTime) / anim.duration, 1));
 
-  const d_ease_dp = anim.v0 !== undefined
-    ? cubicEaseWithInitialVelocityDerivative(p, anim.v0)
-    : easeInOutCubicDerivative(p)
+  const d_ease_dp =
+    anim.v0 !== undefined
+      ? cubicEaseWithInitialVelocityDerivative(p, anim.v0)
+      : easeInOutCubicDerivative(p);
 
-  const totalVisualDelta = anim.targetRotation - anim.startRotation
+  const totalVisualDelta = anim.targetRotation - anim.startRotation;
   // dp/dt = 1 / duration
   // d_angle/dt = (totalVisualDelta) * (d_ease_dp) * (dp/dt)
-  return (totalVisualDelta * d_ease_dp) / anim.duration
-}
+  return (totalVisualDelta * d_ease_dp) / anim.duration;
+};
 
 const stepProgrammaticAnimation = (time) => {
-  const anim = programmaticAnimation.value
-  if (!anim) return
-  const nextRotation = sampleProgrammaticAngle(anim, time)
-  currentLayerRotation.value = nextRotation
+  const anim = programmaticAnimation.value;
+  if (!anim) return;
+  const nextRotation = sampleProgrammaticAngle(anim, time);
+  currentLayerRotation.value = nextRotation;
   if (time - anim.startTime < anim.duration) {
-    requestAnimationFrame(stepProgrammaticAnimation)
+    requestAnimationFrame(stepProgrammaticAnimation);
   } else {
-    let steps = Math.abs(anim.logicalSteps)
-    const dir = anim.logicalSteps >= 0 ? 1 : -1
-    pendingLogicalUpdate.value = true
-    for (let i = 0; i < steps; i += 1) {
-      rotateLayer(anim.axis, anim.index, dir)
+    let steps = Math.abs(anim.logicalSteps);
+    const dir = anim.logicalSteps >= 0 ? 1 : -1;
+
+    programmaticAnimation.value = null;
+
+    if (steps === 0) {
+      // Animation directly cancelled. Manually trigger lock release instead of waiting for worker payload.
+      if (currentMoveId.value !== null) {
+        const idx = movesHistory.value.findIndex(
+          (m) => m.id === currentMoveId.value,
+        );
+        if (idx !== -1) {
+          movesHistory.value[idx] = {
+            ...movesHistory.value[idx],
+            status: "done",
+          };
+        }
+        currentMoveId.value = null;
+      }
+      activeLayer.value = null;
+      isAnimating.value = false;
+      selectedCubie.value = null;
+      selectedFace.value = null;
+      processNextMove();
+    } else {
+      pendingLogicalUpdate.value = true;
+      rotateLayer(anim.axis, anim.index, dir, steps);
     }
-    programmaticAnimation.value = null
   }
-}
+};
 
 const animateProgrammaticMove = (base, modifier, displayBase) => {
-  if (isAnimating.value || activeLayer.value) return
+  if (isAnimating.value || activeLayer.value) return;
 
-  const { axis, index } = getAxisIndexForBase(base)
+  const { axis, index } = getAxisIndexForBase(base);
 
-  const count = modifier === '2' ? 2 : 1
-  const direction = modifier === "'" ? 1 : -1
-  const logicalSteps = direction * count
-  const visualFactor = getVisualFactor(axis, displayBase)
-  const visualDelta = logicalSteps * visualFactor * 90
+  const count = modifier === "2" ? 2 : 1;
+  const direction = modifier === "'" ? 1 : -1;
+  const logicalSteps = direction * count;
+  const visualFactor = getVisualFactor(axis, displayBase);
+  const visualDelta = logicalSteps * visualFactor * 90;
 
   activeLayer.value = {
     axis,
     index,
-    tangent: { x: 1, y: 0 }
-  }
-  isAnimating.value = true
+    tangent: { x: 1, y: 0 },
+  };
+  isAnimating.value = true;
 
-  currentLayerRotation.value = 0
-  const startRotation = 0
-  const targetRotation = visualDelta
+  currentLayerRotation.value = 0;
+  const startRotation = 0;
+  const targetRotation = visualDelta;
 
   programmaticAnimation.value = {
     axis,
@@ -580,184 +615,256 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
     targetRotation,
     startRotation,
     startTime: performance.now(),
-    duration: LAYER_ANIMATION_DURATION * Math.max(Math.abs(visualDelta) / 90 || 1, 0.01)
-  }
+    duration:
+      LAYER_ANIMATION_DURATION *
+      Math.max(Math.abs(visualDelta) / 90 || 1, 0.01),
+  };
 
-  requestAnimationFrame(stepProgrammaticAnimation)
-}
+  requestAnimationFrame(stepProgrammaticAnimation);
+};
 
 const MOVE_MAP = {
-  'U':       { base: 'U', modifier: '' },
-  'U-prime': { base: 'U', modifier: "'" },
-  'U2':      { base: 'U', modifier: '2' },
+  U: { base: "U", modifier: "" },
+  "U-prime": { base: "U", modifier: "'" },
+  U2: { base: "U", modifier: "2" },
 
-  'D':       { base: 'D', modifier: "'" },
-  'D-prime': { base: 'D', modifier: '' },
-  'D2':      { base: 'D', modifier: '2' },
+  D: { base: "D", modifier: "'" },
+  "D-prime": { base: "D", modifier: "" },
+  D2: { base: "D", modifier: "2" },
 
-  'L':       { base: 'B', modifier: "'" },
-  'L-prime': { base: 'B', modifier: '' },
-  'L2':      { base: 'B', modifier: '2' },
+  L: { base: "B", modifier: "'" },
+  "L-prime": { base: "B", modifier: "" },
+  L2: { base: "B", modifier: "2" },
 
-  'R':       { base: 'F', modifier: '' },
-  'R-prime': { base: 'F', modifier: "'" },
-  'R2':      { base: 'F', modifier: '2' },
+  R: { base: "F", modifier: "" },
+  "R-prime": { base: "F", modifier: "'" },
+  R2: { base: "F", modifier: "2" },
 
-  'F':       { base: 'L', modifier: "'" },
-  'F-prime': { base: 'L', modifier: '' },
-  'F2':      { base: 'L', modifier: '2' },
+  F: { base: "L", modifier: "'" },
+  "F-prime": { base: "L", modifier: "" },
+  F2: { base: "L", modifier: "2" },
 
-  'B':       { base: 'R', modifier: '' },
-  'B-prime': { base: 'R', modifier: "'" },
-  'B2':      { base: 'R', modifier: '2' }
-}
+  B: { base: "R", modifier: "" },
+  "B-prime": { base: "R", modifier: "'" },
+  B2: { base: "R", modifier: "2" },
+};
 
-const isAddModalOpen = ref(false)
-const addMovesText = ref('')
+const isAddModalOpen = ref(false);
+const addMovesText = ref("");
 
 const openAddModal = () => {
-  addMovesText.value = ''
-  isAddModalOpen.value = true
-}
+  addMovesText.value = "";
+  isAddModalOpen.value = true;
+};
 
 const closeAddModal = () => {
-  isAddModalOpen.value = false
-}
+  isAddModalOpen.value = false;
+};
 
 const handleKeydown = (e) => {
-  if (e.key === 'Escape' && isAddModalOpen.value) {
-    e.preventDefault()
-    closeAddModal()
+  if (e.key === "Escape" && isAddModalOpen.value) {
+    e.preventDefault();
+    closeAddModal();
   }
-}
+};
 
 const applyMove = (move) => {
-  const mapping = MOVE_MAP[move]
-  if (!mapping) return
+  const mapping = MOVE_MAP[move];
+  if (!mapping) return;
 
-  let delta = 0
-  if (mapping.modifier === "'") delta = 1          // logical +1
-  else if (mapping.modifier === '') delta = -1     // logical -1
-  else if (mapping.modifier === '2') delta = -2    // logical -2
+  let delta = 0;
+  if (mapping.modifier === "'")
+    delta = 1; // logical +1
+  else if (mapping.modifier === "")
+    delta = -1; // logical -1
+  else if (mapping.modifier === "2") delta = -2; // logical -2
 
-  const displayBase = move[0]
-  const { axis, index } = getAxisIndexForBase(mapping.base)
-  const visualFactor = getVisualFactor(axis, displayBase)
-  const currentAnim = programmaticAnimation.value
+  const displayBase = move[0];
+  const { axis, index } = getAxisIndexForBase(mapping.base);
+  const visualFactor = getVisualFactor(axis, displayBase);
+  const currentAnim = programmaticAnimation.value;
 
   if (
     currentAnim &&
     isAnimating.value &&
     activeLayer.value &&
     currentAnim.axis === axis &&
-    currentAnim.index === index
+    currentAnim.index === index &&
+    moveQueue.value.length === 0
   ) {
-    const now = performance.now()
+    const now = performance.now();
 
-    const currentAngle = sampleProgrammaticAngle(currentAnim, now)
-    const currentVelocity = programmaticVelocity(currentAnim, now) // degrees per ms
+    const currentAngle = sampleProgrammaticAngle(currentAnim, now);
+    const currentVelocity = programmaticVelocity(currentAnim, now); // degrees per ms
 
-    currentLayerRotation.value = currentAngle
-    currentAnim.logicalSteps += delta
-    const additionalVisualDelta = delta * currentAnim.visualFactor * 90
+    currentLayerRotation.value = currentAngle;
+    currentAnim.logicalSteps += delta;
+    const additionalVisualDelta = delta * currentAnim.visualFactor * 90;
 
     // Setup new target
-    currentAnim.startRotation = currentAngle
-    currentAnim.targetRotation += additionalVisualDelta
-    currentAnim.startTime = now
+    currentAnim.startRotation = currentAngle;
+    currentAnim.targetRotation += additionalVisualDelta;
+    currentAnim.startTime = now;
 
-    const remainingVisualDelta = currentAnim.targetRotation - currentAngle
+    const remainingVisualDelta = currentAnim.targetRotation - currentAngle;
     // Recalculate duration based on how far we still have to go
-    currentAnim.duration = LAYER_ANIMATION_DURATION * Math.max(Math.abs(remainingVisualDelta) / 90, 0.01)
+    currentAnim.duration =
+      LAYER_ANIMATION_DURATION *
+      Math.max(Math.abs(remainingVisualDelta) / 90, 0.01);
 
     // Calculate normalized initial velocity v0
-    let v0 = 0
+    let v0 = 0;
     if (Math.abs(remainingVisualDelta) > 0.01) {
-       v0 = (currentVelocity * currentAnim.duration) / remainingVisualDelta
+      v0 = (currentVelocity * currentAnim.duration) / remainingVisualDelta;
     }
 
-    currentAnim.v0 = Math.max(-3, Math.min(3, v0))
+    currentAnim.v0 = Math.max(-3, Math.min(3, v0));
 
     // Format the new label instantly
-    const label = formatMoveLabel(displayBase, currentAnim.logicalSteps)
-    updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps)
+    const label = formatMoveLabel(displayBase, currentAnim.logicalSteps);
+    updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps);
 
-    return
+    return;
   }
 
-  const last = moveQueue.value[moveQueue.value.length - 1]
+  const last = moveQueue.value[moveQueue.value.length - 1];
   if (last && last.base === mapping.base && last.displayBase === displayBase) {
-    last.steps += delta
+    last.steps += delta;
   } else {
-    moveQueue.value.push({ base: mapping.base, displayBase, steps: delta })
+    moveQueue.value.push({ base: mapping.base, displayBase, steps: delta });
   }
 
-  processNextMove()
-}
+  processNextMove();
+};
 
-const allMoves = Object.keys(MOVE_MAP)
+const allMoves = Object.keys(MOVE_MAP);
 
 const scramble = () => {
   for (let i = 0; i < 30; i += 1) {
-    const move = allMoves[Math.floor(Math.random() * allMoves.length)]
-    applyMove(move)
+    const move = allMoves[Math.floor(Math.random() * allMoves.length)];
+    applyMove(move);
   }
-}
+};
+
+const handleSolve = async (solverType) => {
+  if (isAnimating.value) return;
+
+  const currentCube = DeepCube.fromCubies(cubies.value);
+
+  if (!currentCube.isValid()) {
+    console.error("Cube is physically impossible!");
+    return;
+  }
+
+  // Already solved? (Identity check)
+  let isSolved = true;
+  for (let i = 0; i < 8; i++)
+    if (currentCube.cp[i] !== i || currentCube.co[i] !== 0) isSolved = false;
+  for (let i = 0; i < 12; i++)
+    if (currentCube.ep[i] !== i || currentCube.eo[i] !== 0) isSolved = false;
+  if (isSolved) return;
+
+  let solution = [];
+  try {
+    if (solverType === "kociemba") {
+      const solver = new KociembaSolver(currentCube);
+      solution = solver.solve();
+    } else if (solverType === "beginner") {
+      const solver = new BeginnerSolver(currentCube);
+      solution = solver.solve();
+    }
+  } catch (e) {
+    console.error("Solver exception:", e);
+    return;
+  }
+
+  if (solution && solution.length > 0) {
+    const uiMoves = solution.map((m) => {
+      const solverBase = m[0];
+      let solverModifier = m.slice(1);
+
+      // Topological neg-axes (D, L, B) require visually inverted dir mapping for CW/CCW
+      if (["D", "L", "B"].includes(solverBase)) {
+        if (solverModifier === "") solverModifier = "'";
+        else if (solverModifier === "'") solverModifier = "";
+      }
+
+      for (const [uiKey, mapping] of Object.entries(MOVE_MAP)) {
+        if (
+          mapping.base === solverBase &&
+          mapping.modifier === solverModifier
+        ) {
+          return uiKey;
+        }
+      }
+      return m;
+    });
+
+    uiMoves.forEach((m) => applyMove(m));
+  }
+};
 
 watch(cubies, () => {
-  if (!pendingLogicalUpdate.value) return
-  pendingLogicalUpdate.value = false
+  if (!pendingLogicalUpdate.value) return;
+  pendingLogicalUpdate.value = false;
 
   if (currentMoveId.value !== null) {
-    const idx = movesHistory.value.findIndex(m => m.id === currentMoveId.value)
+    const idx = movesHistory.value.findIndex(
+      (m) => m.id === currentMoveId.value,
+    );
     if (idx !== -1) {
       movesHistory.value[idx] = {
         ...movesHistory.value[idx],
-        status: 'done'
-      }
+        status: "done",
+      };
     }
-    currentMoveId.value = null
+    currentMoveId.value = null;
   }
 
-  activeLayer.value = null
-  isAnimating.value = false
-  selectedCubie.value = null
-  selectedFace.value = null
-  processNextMove()
-})
+  activeLayer.value = null;
+  isAnimating.value = false;
+  selectedCubie.value = null;
+  selectedFace.value = null;
+  processNextMove();
+});
 
 onMounted(() => {
-  initCube()
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
-  window.addEventListener('keydown', handleKeydown)
-})
+  initCube();
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+  window.addEventListener("keydown", handleKeydown);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
-  window.removeEventListener('keydown', handleKeydown)
-})
-
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", onMouseUp);
+  window.removeEventListener("keydown", handleKeydown);
+});
 </script>
 
 <template>
   <div class="smart-cube-container">
-    <div class="scene" :style="{ transform: `rotateX(${rx}deg) rotateY(${ry}deg)` }">
+    <div
+      class="scene"
+      :style="{ transform: `rotateX(${rx}deg) rotateY(${ry}deg)` }"
+    >
       <div class="cube">
-        <div v-for="c in cubies" :key="c.id"
-             class="cubie"
-             :style="getCubieStyle(c)"
-             :data-cubie-id="c.id">
-
-          <div v-for="(color, face) in c.faces" :key="face"
-               class="sticker"
-               :class="[face, color]"
-               :style="{ opacity: isCubeTranslucent ? 0.3 : 1 }"
-               :data-id="c.id"
-               :data-face="face">
-          </div>
-
+        <div
+          v-for="c in cubies"
+          :key="c.id"
+          class="cubie"
+          :style="getCubieStyle(c)"
+          :data-cubie-id="c.id"
+        >
+          <div
+            v-for="(color, face) in c.faces"
+            :key="face"
+            class="sticker"
+            :class="[face, color]"
+            :style="{ opacity: isCubeTranslucent ? 0.3 : 1 }"
+            :data-id="c.id"
+            :data-face="face"
+          ></div>
         </div>
       </div>
     </div>
@@ -765,6 +872,7 @@ onUnmounted(() => {
     <CubeMoveControls
       @move="applyMove"
       @scramble="scramble"
+      @solve="handleSolve"
     />
 
     <MoveHistoryPanel
@@ -780,15 +888,18 @@ onUnmounted(() => {
       @click.self="closeAddModal"
     >
       <div class="moves-modal">
-        <textarea
-          v-model="addMovesText"
-          class="moves-modal-textarea"
-        />
+        <textarea v-model="addMovesText" class="moves-modal-textarea" />
         <div class="moves-modal-actions">
-          <button class="btn-neon move-btn moves-modal-button" @click="closeAddModal">
+          <button
+            class="btn-neon move-btn moves-modal-button"
+            @click="closeAddModal"
+          >
             cancel
           </button>
-          <button class="btn-neon move-btn moves-modal-button" @click="handleAddMoves(addMovesText)">
+          <button
+            class="btn-neon move-btn moves-modal-button"
+            @click="handleAddMoves(addMovesText)"
+          >
             add moves
           </button>
         </div>
@@ -796,10 +907,10 @@ onUnmounted(() => {
     </div>
     <div class="rotation-debug">
       <div class="rotation-debug-target">
-        {{ rotationDebugTarget !== null ? rotationDebugTarget : '-' }}
+        {{ rotationDebugTarget !== null ? rotationDebugTarget : "-" }}
       </div>
       <div class="rotation-debug-current">
-        {{ rotationDebugCurrent !== null ? rotationDebugCurrent : '-' }}
+        {{ rotationDebugCurrent !== null ? rotationDebugCurrent : "-" }}
       </div>
     </div>
   </div>
@@ -923,8 +1034,10 @@ onUnmounted(() => {
 /* Projection Styles */
 .projections {
   position: absolute;
-  top: 0; left: 0;
-  width: 0; height: 0;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
   pointer-events: none; /* Let clicks pass through to the cube */
   transform-style: preserve-3d;
 }
@@ -969,7 +1082,6 @@ onUnmounted(() => {
   transform: translateX(0) translateY(350px) translateZ(0) rotateX(90deg);
 }
 
-
 .sticker {
   position: absolute;
   width: 100px;
@@ -986,35 +1098,59 @@ onUnmounted(() => {
 
 /* Pseudo-element for the colored sticker part */
 .sticker::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 4px;
   left: 4px;
   right: 4px;
   bottom: 4px;
   border-radius: 8px; /* Rounded sticker */
-  box-shadow: inset 0 0 5px rgba(0,0,0,0.3); /* Inner depth */
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3); /* Inner depth */
   z-index: 1;
 }
 
 /* Sticker Positions relative to Cubie Center */
-.sticker.up    { transform: rotateX(90deg) translateZ(50px); }
-.sticker.down  { transform: rotateX(-90deg) translateZ(50px); }
-.sticker.front { transform: translateZ(50px); }
-.sticker.back  { transform: rotateY(180deg) translateZ(50px); }
-.sticker.left  { transform: rotateY(-90deg) translateZ(50px); }
-.sticker.right { transform: rotateY(90deg) translateZ(50px); }
+.sticker.up {
+  transform: rotateX(90deg) translateZ(50px);
+}
+.sticker.down {
+  transform: rotateX(-90deg) translateZ(50px);
+}
+.sticker.front {
+  transform: translateZ(50px);
+}
+.sticker.back {
+  transform: rotateY(180deg) translateZ(50px);
+}
+.sticker.left {
+  transform: rotateY(-90deg) translateZ(50px);
+}
+.sticker.right {
+  transform: rotateY(90deg) translateZ(50px);
+}
 
 /* Colors - apply to the pseudo-element */
-.white::after  { background: #E0E0E0; }
-.yellow::after { background: #FFD500; }
-.green::after  { background: #009E60; }
-.blue::after   { background: #0051BA; }
-.orange::after { background: #FF5800; }
-.red::after    { background: #C41E3A; }
+.white::after {
+  background: #e0e0e0;
+}
+.yellow::after {
+  background: #ffd500;
+}
+.green::after {
+  background: #009e60;
+}
+.blue::after {
+  background: #0051ba;
+}
+.orange::after {
+  background: #ff5800;
+}
+.red::after {
+  background: #c41e3a;
+}
 
 /* Black internal faces - no sticker needed */
-.black  {
+.black {
   background: #050505;
   border: 1px solid #000;
   border-radius: 0;
@@ -1024,5 +1160,4 @@ onUnmounted(() => {
 .black::after {
   display: none;
 }
-
 </style>

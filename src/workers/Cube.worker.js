@@ -1,6 +1,7 @@
-import { RubiksJSModel } from '../utils/RubiksJSModel.js';
+import { RubiksJSModel } from "../utils/CubeLogicAdapter.js";
 
 const cube = new RubiksJSModel();
+
 
 // Helper to send state update
 const sendUpdate = () => {
@@ -8,14 +9,14 @@ const sendUpdate = () => {
     const cubies = cube.toCubies();
     // console.log('[Worker] Sending update with cubies:', cubies.length);
     postMessage({
-      type: 'STATE_UPDATE',
+      type: "STATE_UPDATE",
       payload: {
-        cubies
-      }
+        cubies,
+      },
     });
   } catch (e) {
-    console.error('[Worker] Error generating cubies:', e);
-    postMessage({ type: 'ERROR', payload: e.message });
+    console.error("[Worker] Error generating cubies:", e);
+    postMessage({ type: "ERROR", payload: e.message });
   }
 };
 
@@ -23,31 +24,31 @@ self.onmessage = (e) => {
   const { type, payload } = e.data;
 
   switch (type) {
-    case 'INIT':
-    case 'RESET':
+    case "INIT":
+    case "RESET":
       cube.reset();
       sendUpdate();
       break;
 
-    case 'ROTATE_LAYER': {
-      const { axis, index, direction } = payload;
-      cube.rotateLayer(axis, index, direction);
+    case "ROTATE_LAYER": {
+      const { axis, index, direction, steps = 1 } = payload;
+      cube.rotateLayer(axis, index, direction, steps);
       sendUpdate();
       break;
     }
 
-    case 'TURN': {
+    case "TURN": {
       const { move } = payload;
       cube.applyTurn(move);
       sendUpdate();
       break;
     }
 
-    case 'VALIDATE':
+    case "VALIDATE":
       const validation = cube.validate();
       postMessage({
-        type: 'VALIDATION_RESULT',
-        payload: { valid: validation.valid, errors: validation.errors }
+        type: "VALIDATION_RESULT",
+        payload: { valid: validation.valid, errors: validation.errors },
       });
       break;
   }
