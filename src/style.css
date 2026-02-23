@@ -31,7 +31,7 @@
   --toggle-btn-border: rgba(255, 255, 255, 0.2);
   --toggle-hover-border: #ffffff;
   --toggle-active-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
-  --panel-bg: rgba(255, 255, 255, 0.1);
+  --panel-bg: rgba(0, 0, 0, 0.4);
   --panel-border: rgba(255, 255, 255, 0.1);
   --panel-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   --button-bg: rgba(255, 255, 255, 0.1);
