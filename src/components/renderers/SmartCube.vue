@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useCube } from '../../composables/useCube'
 import { useSettings } from '../../composables/useSettings'
 import { LAYER_ANIMATION_DURATION } from '../../config/animationSettings'
+import CubeMoveControls from './CubeMoveControls.vue'
+import MoveHistoryPanel from './MoveHistoryPanel.vue'
 
 const { cubies, initCube, rotateLayer, turn, FACES } = useCube()
 const { isCubeTranslucent } = useSettings()
@@ -33,6 +35,21 @@ const currentLayerRotation = ref(0) // Visual rotation in degrees
 const isAnimating = ref(false)
 const pendingLogicalUpdate = ref(false)
 const currentMoveId = ref(null)
+const programmaticAnimation = ref(null)
+
+const rotationDebugTarget = computed(() => {
+  const anim = programmaticAnimation.value
+  if (!anim) return null
+  const angle = anim.targetRotation || 0
+  return Math.round(angle)
+})
+
+const rotationDebugCurrent = computed(() => {
+  const anim = programmaticAnimation.value
+  if (!anim) return null
+  const angle = currentLayerRotation.value || 0
+  return Math.round(angle)
+})
 
 // --- Constants & Helpers ---
 
@@ -268,11 +285,6 @@ const finishMove = (steps, directionOverride = null) => {
 }
 
 const movesHistory = ref([])
-const movesHistoryEl = ref(null)
-const samplePillEl = ref(null)
-const movesPerRow = ref(0)
-const isAddModalOpen = ref(false)
-const addMovesText = ref('')
 
 const displayMoves = computed(() => {
   const list = movesHistory.value.slice()
@@ -299,15 +311,55 @@ const displayMoves = computed(() => {
   return list
 })
 
-const moveRows = computed(() => {
-  const perRow = movesPerRow.value || displayMoves.value.length || 1
-  const rows = []
-  const all = displayMoves.value
-  for (let i = 0; i < all.length; i += perRow) {
-    rows.push(all.slice(i, i + perRow))
+const getAxisIndexForBase = (base) => {
+  if (base === 'U') return { axis: 'y', index: 1 }
+  if (base === 'D') return { axis: 'y', index: -1 }
+  if (base === 'L') return { axis: 'x', index: -1 }
+  if (base === 'R') return { axis: 'x', index: 1 }
+  if (base === 'F') return { axis: 'z', index: 1 }
+  if (base === 'B') return { axis: 'z', index: -1 }
+  return { axis: 'y', index: 0 }
+}
+
+const getVisualFactor = (axis, base) => {
+  let factor = 1
+  if (axis === 'z') factor *= -1
+  if (base === 'U' || base === 'D') factor *= -1
+  return factor
+}
+
+const coerceStepsToSign = (steps, sign) => {
+  if (steps === 0) return 0
+  const mod = ((steps % 4) + 4) % 4
+  if (sign < 0) {
+    if (mod === 1) return -3
+    if (mod === 2) return -2
+    return -1
   }
-  return rows
-})
+  if (mod === 1) return 1
+  if (mod === 2) return 2
+  return 3
+}
+
+const formatMoveLabel = (displayBase, steps) => {
+  const stepsMod = ((steps % 4) + 4) % 4
+  if (stepsMod === 0) return displayBase
+  let modifier = ''
+  if (stepsMod === 1) modifier = "'"
+  else if (stepsMod === 2) modifier = '2'
+  else if (stepsMod === 3) modifier = ''
+  return displayBase + (modifier === "'" ? "'" : modifier === '2' ? '2' : '')
+}
+
+const updateCurrentMoveLabel = (displayBase, steps) => {
+  if (currentMoveId.value === null) return
+  const idx = movesHistory.value.findIndex(m => m.id === currentMoveId.value)
+  if (idx === -1) return
+  movesHistory.value[idx] = {
+    ...movesHistory.value[idx],
+    label: formatMoveLabel(displayBase, steps)
+  }
+}
 
 const copyQueueToClipboard = async () => {
   if (!displayMoves.value.length) return
@@ -333,60 +385,13 @@ const copyQueueToClipboard = async () => {
   }
 }
 
-const setSamplePill = (el) => {
-  if (el && !samplePillEl.value) {
-    samplePillEl.value = el
-  }
-}
-
-const recalcMovesLayout = () => {
-  const container = movesHistoryEl.value
-  const pill = samplePillEl.value
-  if (!container || !pill) return
-
-  const containerWidth = container.clientWidth
-  const pillWidth = pill.offsetWidth
-  if (pillWidth <= 0) return
-
-  const totalWidth = (cols) => {
-    if (cols <= 0) return 0
-    if (cols === 1) return pillWidth
-    return cols * pillWidth + (cols - 1) * MIN_MOVES_COLUMN_GAP
-  }
-
-  let cols = Math.floor((containerWidth + MIN_MOVES_COLUMN_GAP) / (pillWidth + MIN_MOVES_COLUMN_GAP))
-  if (cols < 1) cols = 1
-  while (cols > 1 && totalWidth(cols) > containerWidth) {
-    cols -= 1
-  }
-
-  let gap = 0
-  if (cols > 1) {
-    gap = (containerWidth - cols * pillWidth) / (cols - 1)
-  }
-
-  movesPerRow.value = cols
-  movesColumnGap.value = gap
-}
-
 const resetQueue = () => {
   moveQueue.length = 0
   movesHistory.value = []
   currentMoveId.value = null
-  nextTick(recalcMovesLayout)
 }
 
-const openAddModal = () => {
-  addMovesText.value = ''
-  isAddModalOpen.value = true
-}
-
-const closeAddModal = () => {
-  isAddModalOpen.value = false
-}
-
-const handleAddMoves = () => {
-  const text = addMovesText.value || ''
+const handleAddMoves = (text) => {
   const tokens = text.split(/\s+/).filter(Boolean)
   const moves = []
 
@@ -406,15 +411,6 @@ const handleAddMoves = () => {
   })
 
   moves.forEach((m) => applyMove(m))
-  addMovesText.value = ''
-  isAddModalOpen.value = false
-}
-
-const handleKeydown = (e) => {
-  if (e.key === 'Escape' && isAddModalOpen.value) {
-    e.preventDefault()
-    closeAddModal()
-  }
 }
 
 const getCubieStyle = (c) => {
@@ -489,63 +485,79 @@ const processNextMove = () => {
   movesHistory.value.push({ id, label, status: 'in_progress' })
   currentMoveId.value = id
 
-  animateProgrammaticMove(next.base, next.modifier)
+  animateProgrammaticMove(next.base, next.modifier, baseLabel)
 }
 
-const animateProgrammaticMove = (base, modifier) => {
+const animateProgrammaticMove = (base, modifier, displayBase) => {
   if (isAnimating.value || activeLayer.value) return
 
-  // Map base move to axis/index (same warstwa jak przy dragowaniu)
-  let axis = 'y'
-  let index = 1
-  if (base === 'U') {
-    axis = 'y'; index = 1
-  } else if (base === 'D') {
-    axis = 'y'; index = -1
-  } else if (base === 'L') {
-    axis = 'x'; index = -1
-  } else if (base === 'R') {
-    axis = 'x'; index = 1
-  } else if (base === 'F') {
-    axis = 'z'; index = 1
-  } else if (base === 'B') {
-    axis = 'z'; index = -1
-  }
+  const { axis, index } = getAxisIndexForBase(base)
 
-  // Kierunek zgodny z RubiksJSModel.rotateLayer:
-  // dir === 1 -> ruch z apostrofem, dir === -1 -> ruch podstawowy (bez apostrofu)
   const count = modifier === '2' ? 2 : 1
   const direction = modifier === "'" ? 1 : -1
+  const logicalSteps = direction * count
+  const visualFactor = getVisualFactor(axis, displayBase)
+  const visualDelta = logicalSteps * visualFactor
 
   activeLayer.value = {
     axis,
     index,
     tangent: { x: 1, y: 0 }
   }
-  currentLayerRotation.value = 0
   isAnimating.value = true
 
-  const logicalSteps = direction * count
-  let visualSteps = logicalSteps
-  if (axis === 'z') visualSteps = -visualSteps
-  if (base === 'U' || base === 'D') visualSteps = -visualSteps
-  const target = visualSteps * 90
-  const start = 0
-  const startTime = performance.now()
-  const duration = LAYER_ANIMATION_DURATION * count
+  const startRotation = currentLayerRotation.value
+  const targetRotation = startRotation + visualDelta * 90
+
+  programmaticAnimation.value = {
+    axis,
+    index,
+    displayBase,
+    logicalSteps,
+    visualFactor,
+    targetRotation,
+    startRotation,
+    startTime: performance.now(),
+    duration: LAYER_ANIMATION_DURATION * Math.max(Math.abs(visualDelta) || 1, 0.01)
+  }
 
   const animate = (time) => {
-    const p = Math.min((time - startTime) / duration, 1)
+    const anim = programmaticAnimation.value
+    if (!anim) return
+    const p = Math.min((time - anim.startTime) / anim.duration, 1)
     const ease = 1 - Math.pow(1 - p, 3)
-    currentLayerRotation.value = start + (target - start) * ease
+    let nextRotation = anim.startRotation + (anim.targetRotation - anim.startRotation) * ease
+
+    if (anim.targetRotation >= anim.startRotation) {
+      if (nextRotation < currentLayerRotation.value) {
+        nextRotation = currentLayerRotation.value
+      }
+    } else {
+      if (nextRotation > currentLayerRotation.value) {
+        nextRotation = currentLayerRotation.value
+      }
+    }
+
+    currentLayerRotation.value = nextRotation
+
+    console.log(
+      '[rotation-debug]',
+      'base=', anim.displayBase,
+      'axis=', anim.axis,
+            'target=', rotationDebugTarget.value,
+            'current=', rotationDebugCurrent.value
+    )
 
     if (p < 1) {
       requestAnimationFrame(animate)
     } else {
+      const steps = Math.abs(anim.logicalSteps)
+      const dir = anim.logicalSteps >= 0 ? 1 : -1
       pendingLogicalUpdate.value = true
-      for (let i = 0; i < count; i += 1) {
-        rotateLayer(axis, index, direction)
+      for (let i = 0; i < steps; i += 1) {
+        rotateLayer(anim.axis, anim.index, dir)
       }
+      programmaticAnimation.value = null
     }
   }
 
@@ -578,6 +590,25 @@ const MOVE_MAP = {
   'B2':      { base: 'R', modifier: '2' }
 }
 
+const isAddModalOpen = ref(false)
+const addMovesText = ref('')
+
+const openAddModal = () => {
+  addMovesText.value = ''
+  isAddModalOpen.value = true
+}
+
+const closeAddModal = () => {
+  isAddModalOpen.value = false
+}
+
+const handleKeydown = (e) => {
+  if (e.key === 'Escape' && isAddModalOpen.value) {
+    e.preventDefault()
+    closeAddModal()
+  }
+}
+
 const applyMove = (move) => {
   const mapping = MOVE_MAP[move]
   if (!mapping) return
@@ -588,6 +619,31 @@ const applyMove = (move) => {
   else if (mapping.modifier === '2') delta = -2    // logical -2
 
   const displayBase = move[0]
+  const { axis, index } = getAxisIndexForBase(mapping.base)
+  const visualFactor = getVisualFactor(axis, displayBase)
+  const currentAnim = programmaticAnimation.value
+
+  if (
+    currentAnim &&
+    isAnimating.value &&
+    activeLayer.value &&
+    currentAnim.axis === axis &&
+    currentAnim.index === index
+  ) {
+    const visualDelta = delta * visualFactor
+    const sign = Math.sign(currentAnim.targetRotation - currentLayerRotation.value || visualDelta) || 1
+    const coercedVisualDelta = coerceStepsToSign(visualDelta, sign)
+    const coercedLogicalDelta = coercedVisualDelta * visualFactor
+
+    currentAnim.logicalSteps += coercedLogicalDelta
+    currentAnim.targetRotation += coercedVisualDelta * 90
+    currentAnim.startRotation = currentLayerRotation.value
+    currentAnim.startTime = performance.now()
+    const remaining = Math.abs(currentAnim.targetRotation - currentLayerRotation.value)
+    currentAnim.duration = LAYER_ANIMATION_DURATION * Math.max(remaining / 90, 0.01)
+    updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps)
+    return
+  }
 
   const last = moveQueue[moveQueue.length - 1]
   if (last && last.base === mapping.base && last.displayBase === displayBase) {
@@ -624,7 +680,6 @@ watch(cubies, () => {
   }
 
   activeLayer.value = null
-  currentLayerRotation.value = 0
   isAnimating.value = false
   selectedCubie.value = null
   selectedFace.value = null
@@ -635,20 +690,13 @@ onMounted(() => {
   initCube()
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
-  window.addEventListener('resize', recalcMovesLayout)
   window.addEventListener('keydown', handleKeydown)
-  nextTick(recalcMovesLayout)
 })
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
-  window.removeEventListener('resize', recalcMovesLayout)
   window.removeEventListener('keydown', handleKeydown)
-})
-
-watch(displayMoves, () => {
-  nextTick(recalcMovesLayout)
 })
 
 </script>
@@ -674,86 +722,18 @@ watch(displayMoves, () => {
       </div>
     </div>
 
-    <div class="controls controls-left">
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('U')">U</button>
-        <button class="btn-neon move-btn" @click="applyMove('D')">D</button>
-        <button class="btn-neon move-btn" @click="applyMove('L')">L</button>
-      </div>
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('U-prime')">U'</button>
-        <button class="btn-neon move-btn" @click="applyMove('D-prime')">D'</button>
-        <button class="btn-neon move-btn" @click="applyMove('L-prime')">L'</button>
-      </div>
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('U2')">U2</button>
-        <button class="btn-neon move-btn" @click="applyMove('D2')">D2</button>
-        <button class="btn-neon move-btn" @click="applyMove('L2')">L2</button>
-      </div>
-    </div>
+    <CubeMoveControls
+      @move="applyMove"
+      @scramble="scramble"
+    />
 
-    <div class="controls controls-right">
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('R')">R</button>
-        <button class="btn-neon move-btn" @click="applyMove('F')">F</button>
-        <button class="btn-neon move-btn" @click="applyMove('B')">B</button>
-      </div>
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('R-prime')">R'</button>
-        <button class="btn-neon move-btn" @click="applyMove('F-prime')">F'</button>
-        <button class="btn-neon move-btn" @click="applyMove('B-prime')">B'</button>
-      </div>
-      <div class="controls-row">
-        <button class="btn-neon move-btn" @click="applyMove('R2')">R2</button>
-        <button class="btn-neon move-btn" @click="applyMove('F2')">F2</button>
-        <button class="btn-neon move-btn" @click="applyMove('B2')">B2</button>
-      </div>
-    </div>
-
-    <button class="btn-neon move-btn scramble-btn" @click="scramble">
-      Scramble
-    </button>
-
-    <div class="moves-history">
-      <div class="moves-inner" ref="movesHistoryEl">
-        <div
-          v-for="(row, rowIndex) in moveRows"
-          :key="rowIndex"
-          class="moves-row"
-          :style="{ columnGap: movesColumnGap + 'px' }"
-        >
-          <span
-            v-for="(m, idx) in row"
-            :key="m.id"
-            class="move-pill"
-            :class="{
-              'move-pill-active': m.status === 'in_progress',
-              'move-pill-pending': m.status === 'pending'
-            }"
-            :ref="rowIndex === 0 && idx === 0 ? setSamplePill : null"
-          >
-            {{ m.label }}
-          </span>
-        </div>
-      </div>
-      <div class="moves-actions">
-        <button class="queue-action" @click="openAddModal">add</button>
-        <button
-          v-if="displayMoves.length"
-          class="queue-action"
-          @click="copyQueueToClipboard"
-        >
-          copy
-        </button>
-        <button
-          v-if="displayMoves.length"
-          class="queue-action"
-          @click="resetQueue"
-        >
-          reset
-        </button>
-      </div>
-    </div>
+    <MoveHistoryPanel
+      :moves="displayMoves"
+      @reset="resetQueue"
+      @copy="copyQueueToClipboard"
+      @add-moves="handleAddMoves"
+      @open-add-modal="openAddModal"
+    />
     <div
       v-if="isAddModalOpen"
       class="moves-modal-backdrop"
@@ -768,10 +748,18 @@ watch(displayMoves, () => {
           <button class="btn-neon move-btn moves-modal-button" @click="closeAddModal">
             cancel
           </button>
-          <button class="btn-neon move-btn moves-modal-button" @click="handleAddMoves">
+          <button class="btn-neon move-btn moves-modal-button" @click="handleAddMoves(addMovesText)">
             add moves
           </button>
         </div>
+      </div>
+    </div>
+    <div class="rotation-debug">
+      <div class="rotation-debug-target">
+        {{ rotationDebugTarget !== null ? rotationDebugTarget : '-' }}
+      </div>
+      <div class="rotation-debug-current">
+        {{ rotationDebugCurrent !== null ? rotationDebugCurrent : '-' }}
       </div>
     </div>
   </div>
@@ -810,114 +798,30 @@ watch(displayMoves, () => {
   transform-style: preserve-3d;
 }
 
-.controls {
-  position: absolute;
-  top: 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 50;
-}
-
-.controls-left {
-  left: 24px;
-}
-
-.controls-right {
+.rotation-debug {
+  position: fixed;
   right: 24px;
-}
-
-.controls-row {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.move-btn {
-  min-width: 44px;
-  height: 36px;
-  font-size: 0.9rem;
-  padding: 0 10px;
-}
-
-.scramble-btn {
-  position: absolute;
-  bottom: 72px;
-  left: 24px;
-  z-index: 50;
-}
-
-.moves-history {
-  position: absolute;
-  bottom: 72px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: calc(100vw - 360px);
-  overflow-x: hidden;
-  padding: 12px 12px 26px 12px;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 8px;
-  backdrop-filter: blur(8px);
-}
-
-.moves-inner {
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
-}
-
-.moves-row {
-  display: flex;
-}
-
-.move-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
   color: #fff;
-  white-space: nowrap;
+  z-index: 60;
 }
 
-.move-pill-active {
-  background: #ffd500;
-  color: #000;
-  border-color: #ffd500;
+.rotation-debug-target {
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
-.move-pill-pending {
-  opacity: 0.4;
-}
-
-.moves-actions {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  display: flex;
-  gap: 0px;
-}
-
-.queue-action {
-  border: none;
-  background: transparent;
-  padding: 6px 6px;
-  color: #fff;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.moves-history::after {
-  content: none;
-}
-
-.queue-action:focus {
-  outline: none;
-  box-shadow: none;
+.rotation-debug-current {
+  font-size: 0.95rem;
+  opacity: 0.8;
 }
 
 .moves-modal-backdrop {
