@@ -19,3 +19,15 @@ The software operates entirely in the browser using a custom Group Theory mathem
     - **Beginner Method (Human):** Constructs the solution layer-by-layer simulating human heuristics natively with instantaneous $O(1)$ algorithmic macros.
     - **Kociemba's Algorithm (Optimal):** Offloads pruning tables and recursive heuristic searches to Web Workers to instantly calculate and stream back the objectively shortest path solution (typically <20 moves).
 - **High Performance:** Decoupling the single-threaded UI rendering stack from mathematical validations ensures 60 FPS 3D animations, even while executing computationally expensive analytical algorithms in the background.
+
+## Development & Asset Generation
+
+To keep the production build lightweight and avoid native dependency issues on servers (e.g. Docker), heavy packages like `canvas`, `puppeteer`, and `imagetracerjs` have been removed from the default `devDependencies`.
+
+If you need to run the auxiliary scripts in `scripts/` (for screenshotting or regenerating `cube.svg`), you must install them manually:
+
+```bash
+npm install -D canvas puppeteer imagetracerjs
+```
+
+These are only required for offline asset optimization and are not needed to build or run the main application.

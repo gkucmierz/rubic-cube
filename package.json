@@ -16,9 +16,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
-    "canvas": "^3.2.1",
-    "imagetracerjs": "^1.2.6",
-    "puppeteer": "^24.37.5",
     "vite": "^6.2.0"
   }
 }
