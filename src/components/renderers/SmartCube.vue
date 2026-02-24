@@ -7,143 +7,20 @@ import CubeMoveControls from "./CubeMoveControls.vue";
 import MoveHistoryPanel from "./MoveHistoryPanel.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
 import { showToast } from "../../utils/toastHelper.js";
+import { identityMatrix, rotateXMatrix, rotateYMatrix, rotateZMatrix, multiplyMatrices, matToQuat, slerp, quatToMat } from "../../utils/matrix.js";
+import { MOVE_MAP, INTERNAL_TO_UI, getAxisIndexForBase, getMathDirectionForBase, getDragMoveLabel, coerceStepsToSign, formatMoveLabel } from "../../utils/moveMapping.js";
+import { easeInOutCubic, easeInOutCubicDerivative, cubicEaseWithInitialVelocity, cubicEaseWithInitialVelocityDerivative } from "../../utils/easing.js";
+import { getFaceNormal as getFaceNormalRaw, getAllowedAxes as getAllowedAxesRaw, getAxisVector, cross, project as projectRaw } from "../../utils/cubeProjection.js";
 
 const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
 const { isCubeTranslucent } = useSettings();
 
+// Bind FACES and viewMatrix to imported helpers
+const getFaceNormal = (face) => getFaceNormalRaw(face, FACES);
+const getAllowedAxes = (face) => getAllowedAxesRaw(face, FACES);
+const project = (v) => projectRaw(v, viewMatrix.value);
+
 // --- Visual State ---
-// viewMatrix is a 4x4 matrix (16 floats) representing the scene rotation.
-// Initial state: Tilt X by -25deg, Rotate Y by 45deg.
-const identityMatrix = () => [
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1
-];
-
-const rotateXMatrix = (deg) => {
-  const rad = (deg * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  return [
-    1, 0, 0, 0,
-    0, c, s, 0,
-    0, -s, c, 0,
-    0, 0, 0, 1
-  ];
-};
-
-const rotateYMatrix = (deg) => {
-  const rad = (deg * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  return [
-    c, 0, -s, 0,
-    0, 1, 0, 0,
-    s, 0, c, 0,
-    0, 0, 0, 1
-  ];
-};
-
-const rotateZMatrix = (deg) => {
-  const rad = (deg * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  return [
-    c, s, 0, 0,
-    -s, c, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1
-  ];
-};
-
-const multiplyMatrices = (a, b) => {
-  const result = new Array(16).fill(0);
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      for (let k = 0; k < 4; k++) {
-        result[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
-      }
-    }
-  }
-  return result;
-};
-
-// Quaternion helpers for distortion-free rotation interpolation (SLERP)
-const matToQuat = (m) => {
-  const trace = m[0] + m[5] + m[10];
-  let w, x, y, z;
-  if (trace > 0) {
-    const s = 0.5 / Math.sqrt(trace + 1);
-    w = 0.25 / s;
-    x = (m[6] - m[9]) * s;
-    y = (m[8] - m[2]) * s;
-    z = (m[1] - m[4]) * s;
-  } else if (m[0] > m[5] && m[0] > m[10]) {
-    const s = 2 * Math.sqrt(1 + m[0] - m[5] - m[10]);
-    w = (m[6] - m[9]) / s;
-    x = 0.25 * s;
-    y = (m[4] + m[1]) / s;
-    z = (m[8] + m[2]) / s;
-  } else if (m[5] > m[10]) {
-    const s = 2 * Math.sqrt(1 + m[5] - m[0] - m[10]);
-    w = (m[8] - m[2]) / s;
-    x = (m[4] + m[1]) / s;
-    y = 0.25 * s;
-    z = (m[6] + m[9]) / s;
-  } else {
-    const s = 2 * Math.sqrt(1 + m[10] - m[0] - m[5]);
-    w = (m[1] - m[4]) / s;
-    x = (m[8] + m[2]) / s;
-    y = (m[6] + m[9]) / s;
-    z = 0.25 * s;
-  }
-  return { w, x, y, z };
-};
-
-const slerp = (q1, q2, t) => {
-  let dot = q1.w * q2.w + q1.x * q2.x + q1.y * q2.y + q1.z * q2.z;
-  let q2n = q2;
-  if (dot < 0) {
-    q2n = { w: -q2.w, x: -q2.x, y: -q2.y, z: -q2.z };
-    dot = -dot;
-  }
-  if (dot > 0.9995) {
-    const len = Math.sqrt(
-      (q1.w + t * (q2n.w - q1.w)) ** 2 + (q1.x + t * (q2n.x - q1.x)) ** 2 +
-      (q1.y + t * (q2n.y - q1.y)) ** 2 + (q1.z + t * (q2n.z - q1.z)) ** 2
-    );
-    return {
-      w: (q1.w + t * (q2n.w - q1.w)) / len,
-      x: (q1.x + t * (q2n.x - q1.x)) / len,
-      y: (q1.y + t * (q2n.y - q1.y)) / len,
-      z: (q1.z + t * (q2n.z - q1.z)) / len,
-    };
-  }
-  const theta = Math.acos(dot);
-  const sinTheta = Math.sin(theta);
-  const a = Math.sin((1 - t) * theta) / sinTheta;
-  const b = Math.sin(t * theta) / sinTheta;
-  return {
-    w: a * q1.w + b * q2n.w,
-    x: a * q1.x + b * q2n.x,
-    y: a * q1.y + b * q2n.y,
-    z: a * q1.z + b * q2n.z,
-  };
-};
-
-const quatToMat = (q) => {
-  const { w, x, y, z } = q;
-  const xx = x * x, yy = y * y, zz = z * z;
-  const xy = x * y, xz = x * z, yz = y * z;
-  const wx = w * x, wy = w * y, wz = w * z;
-  return [
-    1 - 2 * (yy + zz), 2 * (xy + wz),     2 * (xz - wy),     0,
-    2 * (xy - wz),     1 - 2 * (xx + zz), 2 * (yz + wx),     0,
-    2 * (xz + wy),     2 * (yz - wx),     1 - 2 * (xx + yy), 0,
-    0,                 0,                 0,                 1,
-  ];
-};
 
 // Initial orientation: Tilt X, then Spin Y
 const viewMatrix = ref(multiplyMatrices(rotateXMatrix(-25), rotateYMatrix(45)));
@@ -219,67 +96,6 @@ const rotationDebugCurrent = computed(() => {
   return Math.round(angle);
 });
 
-// --- Constants & Helpers ---
-
-const getFaceNormal = (face) => {
-  const map = {
-    [FACES.FRONT]: { x: 0, y: 0, z: 1 },
-    [FACES.BACK]: { x: 0, y: 0, z: -1 },
-    [FACES.RIGHT]: { x: 1, y: 0, z: 0 },
-    [FACES.LEFT]: { x: -1, y: 0, z: 0 },
-    [FACES.UP]: { x: 0, y: 1, z: 0 },
-    [FACES.DOWN]: { x: 0, y: -1, z: 0 },
-  };
-  return map[face] || { x: 0, y: 0, z: 1 };
-};
-
-const getAllowedAxes = (face) => {
-  // Logic: Which axes can this face physically move along?
-  switch (face) {
-    case FACES.FRONT:
-    case FACES.BACK:
-      return ["x", "y"];
-    case FACES.RIGHT:
-    case FACES.LEFT:
-      return ["z", "y"];
-    case FACES.UP:
-    case FACES.DOWN:
-      return ["x", "z"];
-  }
-  return [];
-};
-
-const getAxisVector = (axis) => {
-  if (axis === "x") return { x: 1, y: 0, z: 0 };
-  if (axis === "y") return { x: 0, y: 1, z: 0 };
-  if (axis === "z") return { x: 0, y: 0, z: 1 };
-  return { x: 0, y: 0, z: 0 };
-};
-
-// Cross Product: a x b
-const cross = (a, b) => ({
-  x: a.y * b.z - a.z * b.y,
-  y: a.z * b.x - a.x * b.z,
-  z: a.x * b.y - a.y * b.x,
-});
-
-// Project 3D vector to 2D screen space based on current viewMatrix
-const project = (v) => {
-  const m = viewMatrix.value;
-  // Apply rotation matrix: v' = M * v
-  // However, `v` is in strictly Right-Handed Math Coordinates (Y is UP).
-  // `viewMatrix` operates strictly in CSS Coordinates (Y is DOWN).
-  // We must apply a space transformation T^-1 * M * T to maintain correct projection chirality.
-  const cssY = -v.y;
-
-  const x = v.x * m[0] + cssY * m[4] + v.z * m[8];
-  const projY = v.x * m[1] + cssY * m[5] + v.z * m[9];
-
-  const mathY = -projY;
-
-  // z ignored for 2D projection
-  return { x, y: mathY };
-};
 
 // --- Interaction Logic ---
 
@@ -463,55 +279,7 @@ const snapRotation = () => {
 
 const pendingCameraRotation = ref(null);
 const pendingDragMoveLabel = ref(null);
-// The UI face labels (shown on buttons) differ from internal logic axis names.
-// MOVE_MAP shows: Button "R" → base "F", Button "L" → base "B", etc.
-// This means the UI coordinate system is rotated 90° around Y from internal coords.
-// Internal → UI translation:
-const INTERNAL_TO_UI = {
-  'F': 'R', 'B': 'L', 'R': 'B', 'L': 'F',
-  'U': 'U', 'D': 'D',
-  'M': 'M', 'E': 'E', 'S': 'S',
-};
 
-// Convert axis/index/direction to a standard Rubik's notation label (UI-facing)
-const getDragMoveLabel = (axis, index, direction, count) => {
-  // Outer layers
-  const OUTER_MAP = {
-    'y_1':  { base: 'U', dir: -1 },
-    'y_-1': { base: 'D', dir: 1 },
-    'x_1':  { base: 'R', dir: -1 },
-    'x_-1': { base: 'L', dir: 1 },
-    'z_1':  { base: 'F', dir: -1 },
-    'z_-1': { base: 'B', dir: 1 },
-  };
-  // Middle slices
-  const SLICE_MAP = {
-    'x_0': { base: 'M', dir: 1 },
-    'y_0': { base: 'E', dir: 1 },
-    'z_0': { base: 'S', dir: -1 },
-  };
-
-  const key = `${axis}_${index}`;
-  const mapping = OUTER_MAP[key] || SLICE_MAP[key];
-  if (!mapping) return null;
-
-  const effective = direction * mapping.dir;
-  const stepsMod = ((count % 4) + 4) % 4;
-  if (stepsMod === 0) return null;
-
-  let modifier = '';
-  if (stepsMod === 2) {
-    modifier = '2';
-  } else if ((effective > 0 && stepsMod === 1) || (effective < 0 && stepsMod === 3)) {
-    modifier = '';
-  } else {
-    modifier = "'";
-  }
-
-  // Translate internal face name to UI face name
-  const uiBase = INTERNAL_TO_UI[mapping.base] || mapping.base;
-  return uiBase + modifier;
-};
 
 const finishMove = (steps, directionOverride = null) => {
   if (steps !== 0 && activeLayer.value) {
@@ -577,46 +345,6 @@ const displayMoves = computed(() => {
   return list;
 });
 
-const getAxisIndexForBase = (base) => {
-  if (base === "U") return { axis: "y", index: 1 };
-  if (base === "D") return { axis: "y", index: -1 };
-  if (base === "L") return { axis: "x", index: -1 };
-  if (base === "R") return { axis: "x", index: 1 };
-  if (base === "F") return { axis: "z", index: 1 };
-  if (base === "B") return { axis: "z", index: -1 };
-  return { axis: "y", index: 0 };
-};
-
-// Mathematical positive rotation (RHR) corresponds to CCW face rules
-// for positive axes, and CW face rules for negative axes.
-const getMathDirectionForBase = (base) => {
-  if (['R', 'U', 'F', 'S'].includes(base)) return -1;
-  if (['L', 'D', 'B', 'M', 'E'].includes(base)) return 1;
-  return 1;
-};
-
-const coerceStepsToSign = (steps, sign) => {
-  if (steps === 0) return 0;
-  const mod = ((steps % 4) + 4) % 4;
-  if (sign < 0) {
-    if (mod === 1) return -3;
-    if (mod === 2) return -2;
-    return -1;
-  }
-  if (mod === 1) return 1;
-  if (mod === 2) return 2;
-  return 3;
-};
-
-const formatMoveLabel = (displayBase, steps) => {
-  const stepsMod = ((steps % 4) + 4) % 4;
-  if (stepsMod === 0) return displayBase;
-  let modifier = "";
-  if (stepsMod === 1) modifier = "'";
-  else if (stepsMod === 2) modifier = "2";
-  else if (stepsMod === 3) modifier = "";
-  return displayBase + (modifier === "'" ? "'" : modifier === "2" ? "2" : "");
-};
 
 const updateCurrentMoveLabel = (displayBase, steps) => {
   if (currentMoveId.value === null) return;
@@ -759,27 +487,6 @@ const processNextMove = () => {
   animateProgrammaticMove(next.base, next.modifier, baseLabel);
 };
 
-const easeInOutCubic = (t) => {
-  if (t < 0.5) return 4 * t * t * t;
-  return 1 - Math.pow(-2 * t + 2, 3) / 2;
-};
-
-// Derivative of standard easeInOutCubic for instantaneous velocity calculations
-const easeInOutCubicDerivative = (t) => {
-  if (t < 0.5) return 12 * t * t;
-  return 3 * Math.pow(-2 * t + 2, 2);
-};
-
-// Custom easing function that preserves initial velocity $v_0$
-// The polynomial is $P(t) = (v_0 - 2)t^3 + (3 - 2v_0)t^2 + v_0 t$
-const cubicEaseWithInitialVelocity = (t, v0) => {
-  return (v0 - 2) * t * t * t + (3 - 2 * v0) * t * t + v0 * t;
-};
-
-// Derivative of the custom easing function
-const cubicEaseWithInitialVelocityDerivative = (t, v0) => {
-  return 3 * (v0 - 2) * t * t + 2 * (3 - 2 * v0) * t + v0;
-};
 
 const sampleProgrammaticAngle = (anim, time) => {
   const p = Math.min((time - anim.startTime) / anim.duration, 1);
@@ -885,32 +592,6 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
   };
 
   requestAnimationFrame(stepProgrammaticAnimation);
-};
-
-const MOVE_MAP = {
-  U: { base: "U", modifier: "" },
-  "U-prime": { base: "U", modifier: "'" },
-  U2: { base: "U", modifier: "2" },
-
-  D: { base: "D", modifier: "" },
-  "D-prime": { base: "D", modifier: "'" },
-  D2: { base: "D", modifier: "2" },
-
-  L: { base: "B", modifier: "" },
-  "L-prime": { base: "B", modifier: "'" },
-  L2: { base: "B", modifier: "2" },
-
-  R: { base: "F", modifier: "" },
-  "R-prime": { base: "F", modifier: "'" },
-  R2: { base: "F", modifier: "2" },
-
-  F: { base: "L", modifier: "" },
-  "F-prime": { base: "L", modifier: "'" },
-  F2: { base: "L", modifier: "2" },
-
-  B: { base: "R", modifier: "" },
-  "B-prime": { base: "R", modifier: "'" },
-  B2: { base: "R", modifier: "2" },
 };
 
 const isAddModalOpen = ref(false);
@@ -1217,7 +898,7 @@ onUnmounted(() => {
           </button>
           <button
             class="btn-neon move-btn moves-modal-button"
-            @click="handleAddMoves(addMovesText)"
+            @click="handleAddMoves(addMovesText); closeAddModal()"
           >
             add moves
           </button>
