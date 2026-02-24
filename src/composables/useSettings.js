@@ -6,7 +6,7 @@ try {
   if (stored !== null) {
     initialCubeTranslucent = stored === "true";
   }
-} catch (e) {}
+} catch (e) { }
 
 const isCubeTranslucent = ref(initialCubeTranslucent);
 
@@ -15,7 +15,7 @@ export function useSettings() {
     isCubeTranslucent.value = !isCubeTranslucent.value;
     try {
       localStorage.setItem("cubeTranslucent", String(isCubeTranslucent.value));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   return {

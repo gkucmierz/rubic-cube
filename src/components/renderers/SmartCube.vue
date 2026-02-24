@@ -2,13 +2,13 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useCube } from "../../composables/useCube";
 import { useSettings } from "../../composables/useSettings";
-import { LAYER_ANIMATION_DURATION } from "../../config/animationSettings";
+import { LAYER_ANIMATION_DURATION, MIDDLE_SLICES_ENABLED } from "../../config/settings";
 import CubeMoveControls from "./CubeMoveControls.vue";
 import MoveHistoryPanel from "./MoveHistoryPanel.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
 import { showToast } from "../../utils/toastHelper.js";
 
-const { cubies, initCube, rotateLayer, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
+const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
 const { isCubeTranslucent } = useSettings();
 
 // --- Visual State ---
@@ -41,6 +41,18 @@ const rotateYMatrix = (deg) => {
     c, 0, -s, 0,
     0, 1, 0, 0,
     s, 0, c, 0,
+    0, 0, 0, 1
+  ];
+};
+
+const rotateZMatrix = (deg) => {
+  const rad = (deg * Math.PI) / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return [
+    c, s, 0, 0,
+    -s, c, 0, 0,
+    0, 0, 1, 0,
     0, 0, 0, 1
   ];
 };
@@ -145,11 +157,18 @@ const cross = (a, b) => ({
 const project = (v) => {
   const m = viewMatrix.value;
   // Apply rotation matrix: v' = M * v
-  // (Ignoring translation/w for pure rotation projection)
-  const x = v.x * m[0] + v.y * m[4] + v.z * m[8];
-  const y = v.x * m[1] + v.y * m[5] + v.z * m[9];
+  // However, `v` is in strictly Right-Handed Math Coordinates (Y is UP).
+  // `viewMatrix` operates strictly in CSS Coordinates (Y is DOWN).
+  // We must apply a space transformation T^-1 * M * T to maintain correct projection chirality.
+  const cssY = -v.y;
+
+  const x = v.x * m[0] + cssY * m[4] + v.z * m[8];
+  const projY = v.x * m[1] + cssY * m[5] + v.z * m[9];
+
+  const mathY = -projY;
+
   // z ignored for 2D projection
-  return { x, y };
+  return { x, y: mathY };
 };
 
 // --- Interaction Logic ---
@@ -163,6 +182,7 @@ const onMouseDown = (e) => {
   lastX.value = e.clientX;
   lastY.value = e.clientY;
   velocity.value = 0;
+  currentLayerRotation.value = 0;
 
   const target = e.target.closest(".sticker");
   if (target) {
@@ -206,9 +226,11 @@ const onMouseMove = (e) => {
     viewMatrix.value = multiplyMatrices(combinedDelta, viewMatrix.value);
   } else if (dragMode.value === "layer" && selectedCubie.value) {
     const totalDx = e.clientX - startX.value;
-    const totalDy = e.clientY - startY.value;
+    const totalDy = -(e.clientY - startY.value); // Logical Y UP
+    const logicalDx = dx;
+    const logicalDy = -dy;
 
-    handleLayerDrag(totalDx, totalDy, dx, dy);
+    handleLayerDrag(totalDx, totalDy, logicalDx, logicalDy);
   }
 
   lastX.value = e.clientX;
@@ -228,9 +250,8 @@ const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
 
     // Analyze candidates
     axes.forEach((axis) => {
-      // Tangent = Normal x Axis
-      // This is the 3D direction of motion for Positive Rotation around this Axis
-      const t3D = cross(faceNormal, getAxisVector(axis));
+      // Tangent rule for rigid body positive rotation: w x r
+      const t3D = cross(getAxisVector(axis), faceNormal);
       const t2D = project(t3D);
       const len = Math.sqrt(t2D.x ** 2 + t2D.y ** 2);
 
@@ -258,6 +279,12 @@ const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
       if (best.axis === "x") index = selectedCubie.value.x;
       if (best.axis === "y") index = selectedCubie.value.y;
       if (best.axis === "z") index = selectedCubie.value.z;
+
+      // If middle slice (index === 0) and middle slices are disabled, ignore the drag
+      if (index === 0 && !MIDDLE_SLICES_ENABLED) {
+        dragMode.value = "view";
+        return;
+      }
 
       activeLayer.value = {
         axis: best.axis,
@@ -318,6 +345,58 @@ const snapRotation = () => {
   requestAnimationFrame(animate);
 };
 
+const pendingCameraRotation = ref(null);
+const pendingDragMoveLabel = ref(null);
+// The UI face labels (shown on buttons) differ from internal logic axis names.
+// MOVE_MAP shows: Button "R" → base "F", Button "L" → base "B", etc.
+// This means the UI coordinate system is rotated 90° around Y from internal coords.
+// Internal → UI translation:
+const INTERNAL_TO_UI = {
+  'F': 'R', 'B': 'L', 'R': 'B', 'L': 'F',
+  'U': 'U', 'D': 'D',
+  'M': 'M', 'E': 'E', 'S': 'S',
+};
+
+// Convert axis/index/direction to a standard Rubik's notation label (UI-facing)
+const getDragMoveLabel = (axis, index, direction, count) => {
+  // Outer layers
+  const OUTER_MAP = {
+    'y_1':  { base: 'U', dir: -1 },
+    'y_-1': { base: 'D', dir: 1 },
+    'x_1':  { base: 'R', dir: -1 },
+    'x_-1': { base: 'L', dir: 1 },
+    'z_1':  { base: 'F', dir: -1 },
+    'z_-1': { base: 'B', dir: 1 },
+  };
+  // Middle slices
+  const SLICE_MAP = {
+    'x_0': { base: 'M', dir: 1 },
+    'y_0': { base: 'E', dir: 1 },
+    'z_0': { base: 'S', dir: -1 },
+  };
+
+  const key = `${axis}_${index}`;
+  const mapping = OUTER_MAP[key] || SLICE_MAP[key];
+  if (!mapping) return null;
+
+  const effective = direction * mapping.dir;
+  const stepsMod = ((count % 4) + 4) % 4;
+  if (stepsMod === 0) return null;
+
+  let modifier = '';
+  if (stepsMod === 2) {
+    modifier = '2';
+  } else if ((effective > 0 && stepsMod === 1) || (effective < 0 && stepsMod === 3)) {
+    modifier = '';
+  } else {
+    modifier = "'";
+  }
+
+  // Translate internal face name to UI face name
+  const uiBase = INTERNAL_TO_UI[mapping.base] || mapping.base;
+  return uiBase + modifier;
+};
+
 const finishMove = (steps, directionOverride = null) => {
   if (steps !== 0 && activeLayer.value) {
     const { axis, index } = activeLayer.value;
@@ -325,17 +404,32 @@ const finishMove = (steps, directionOverride = null) => {
     const direction =
       directionOverride !== null ? directionOverride : steps > 0 ? 1 : -1;
 
-    // LOGICAL SYNC (CRITICAL):
-    // Our visual rotation signs in getCubieStyle and tangent calc are now aligned.
-    // However, some axes might still be inverted based on coordinate system (Right-handed vs CSS).
-    let finalDirection = direction;
-
-    // Y-axis spin in project/matrix logic vs cubic logic often needs swap
-    if (axis === "y") finalDirection *= -1;
-    if (axis === "z") finalDirection *= -1;
-
+    // LOGICAL SYNC:
+    // With pure math mapping, visual positive rotation is directly
+    // equivalent to logical positive rotation. No more axis-flipping hacks!
     pendingLogicalUpdate.value = true;
-    rotateLayer(axis, index, finalDirection, count);
+
+    // Record the drag move in history
+    const moveLabel = getDragMoveLabel(axis, index, direction, count);
+    if (moveLabel) {
+      pendingDragMoveLabel.value = moveLabel;
+    }
+
+    if (index === 0) {
+      // Middle slice moved!
+      pendingCameraRotation.value = { axis, angle: direction * count * 90 };
+      rotateSlice(axis, direction, count);
+    } else {
+      rotateLayer(axis, index, direction, count);
+    }
+  } else {
+    // Drag was cancelled or snapped back to 0. Release lock.
+    activeLayer.value = null;
+    isAnimating.value = false;
+    currentLayerRotation.value = 0;
+    selectedCubie.value = null;
+    selectedFace.value = null;
+    processNextMove();
   }
 };
 
@@ -377,11 +471,12 @@ const getAxisIndexForBase = (base) => {
   return { axis: "y", index: 0 };
 };
 
-const getVisualFactor = (axis, base) => {
-  let factor = 1;
-  if (axis === "z") factor *= -1;
-  if (base === "U" || base === "D") factor *= -1;
-  return factor;
+// Mathematical positive rotation (RHR) corresponds to CCW face rules
+// for positive axes, and CW face rules for negative axes.
+const getMathDirectionForBase = (base) => {
+  if (['R', 'U', 'F', 'S'].includes(base)) return -1;
+  if (['L', 'D', 'B', 'M', 'E'].includes(base)) return 1;
+  return 1;
 };
 
 const coerceStepsToSign = (steps, sign) => {
@@ -500,8 +595,8 @@ const getCubieStyle = (c) => {
       // CSS rotateY: + is Right->Back. (Spin Right)
       // CSS rotateZ: + is Top->Right. (Clockwise)
 
-      // We align rot so that +90 degrees visually matches logical direction=1 (CW)
-      if (axis === "x") transform = `rotateX(${rot}deg) ` + transform;
+      // CSS rotateY aligns with Math +Y. CSS rotateX and rotateZ are inverted.
+      if (axis === "x") transform = `rotateX(${-rot}deg) ` + transform;
       if (axis === "y") transform = `rotateY(${rot}deg) ` + transform;
       if (axis === "z") transform = `rotateZ(${-rot}deg) ` + transform;
     }
@@ -638,12 +733,17 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
   if (isAnimating.value || activeLayer.value) return;
 
   const { axis, index } = getAxisIndexForBase(base);
+  const mathDir = getMathDirectionForBase(base);
 
-  const count = modifier === "2" ? 2 : 1;
-  const direction = modifier === "'" ? 1 : -1;
-  const logicalSteps = direction * count;
-  const visualFactor = getVisualFactor(axis, displayBase);
-  const visualDelta = logicalSteps * visualFactor * 90;
+  let moveSign = 1; // CW
+  let count = 1;
+  if (modifier === "'") { moveSign = -1; count = 1; }
+  else if (modifier === "2") { moveSign = 1; count = 2; }
+
+  // Mathematical target rotation handles the physical modeling
+  const targetRotation = mathDir * moveSign * count * 90;
+  // Logical steps controls the worker logic update direction
+  const logicalSteps = mathDir * moveSign * count;
 
   activeLayer.value = {
     axis,
@@ -654,20 +754,18 @@ const animateProgrammaticMove = (base, modifier, displayBase) => {
 
   currentLayerRotation.value = 0;
   const startRotation = 0;
-  const targetRotation = visualDelta;
 
   programmaticAnimation.value = {
     axis,
     index,
     displayBase,
     logicalSteps,
-    visualFactor,
     targetRotation,
     startRotation,
     startTime: performance.now(),
     duration:
       LAYER_ANIMATION_DURATION *
-      Math.max(Math.abs(visualDelta) / 90 || 1, 0.01),
+      Math.max(Math.abs(targetRotation) / 90, 0.01),
   };
 
   requestAnimationFrame(stepProgrammaticAnimation);
@@ -678,20 +776,20 @@ const MOVE_MAP = {
   "U-prime": { base: "U", modifier: "'" },
   U2: { base: "U", modifier: "2" },
 
-  D: { base: "D", modifier: "'" },
-  "D-prime": { base: "D", modifier: "" },
+  D: { base: "D", modifier: "" },
+  "D-prime": { base: "D", modifier: "'" },
   D2: { base: "D", modifier: "2" },
 
-  L: { base: "B", modifier: "'" },
-  "L-prime": { base: "B", modifier: "" },
+  L: { base: "B", modifier: "" },
+  "L-prime": { base: "B", modifier: "'" },
   L2: { base: "B", modifier: "2" },
 
   R: { base: "F", modifier: "" },
   "R-prime": { base: "F", modifier: "'" },
   R2: { base: "F", modifier: "2" },
 
-  F: { base: "L", modifier: "'" },
-  "F-prime": { base: "L", modifier: "" },
+  F: { base: "L", modifier: "" },
+  "F-prime": { base: "L", modifier: "'" },
   F2: { base: "L", modifier: "2" },
 
   B: { base: "R", modifier: "" },
@@ -722,16 +820,17 @@ const applyMove = (move) => {
   const mapping = MOVE_MAP[move];
   if (!mapping) return;
 
+  // Track queue legacy steps formatting: '' = -1, "'" = 1, '2' = -2
   let delta = 0;
   if (mapping.modifier === "'")
-    delta = 1; // logical +1
+    delta = 1;
   else if (mapping.modifier === "")
-    delta = -1; // logical -1
-  else if (mapping.modifier === "2") delta = -2; // logical -2
+    delta = -1;
+  else if (mapping.modifier === "2") delta = -2;
 
   const displayBase = move[0];
   const { axis, index } = getAxisIndexForBase(mapping.base);
-  const visualFactor = getVisualFactor(axis, displayBase);
+  const mathDir = getMathDirectionForBase(mapping.base);
   const currentAnim = programmaticAnimation.value;
 
   if (
@@ -747,13 +846,21 @@ const applyMove = (move) => {
     const currentAngle = sampleProgrammaticAngle(currentAnim, now);
     const currentVelocity = programmaticVelocity(currentAnim, now); // degrees per ms
 
+    let moveSign = 1; // CW
+    let count = 1;
+    if (mapping.modifier === "'") { moveSign = -1; count = 1; }
+    else if (mapping.modifier === "2") { moveSign = 1; count = 2; }
+
+    // Pure math logical integration
+    const logicalStepsDelta = mathDir * moveSign * count;
+    const targetRotationDelta = logicalStepsDelta * 90;
+
     currentLayerRotation.value = currentAngle;
-    currentAnim.logicalSteps += delta;
-    const additionalVisualDelta = delta * currentAnim.visualFactor * 90;
+    currentAnim.logicalSteps += logicalStepsDelta;
 
     // Setup new target
     currentAnim.startRotation = currentAngle;
-    currentAnim.targetRotation += additionalVisualDelta;
+    currentAnim.targetRotation += targetRotationDelta;
     currentAnim.startTime = now;
 
     const remainingVisualDelta = currentAnim.targetRotation - currentAngle;
@@ -771,7 +878,6 @@ const applyMove = (move) => {
     currentAnim.v0 = Math.max(-3, Math.min(3, v0));
 
     // Format the new label instantly
-    const label = formatMoveLabel(displayBase, currentAnim.logicalSteps);
     updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps);
 
     return;
@@ -809,7 +915,17 @@ const handleSolve = async (solverType) => {
     return;
   }
 
-  const currentCube = DeepCube.fromCubies(cubies.value);
+  if (!deepCubeState.value) {
+    console.error("DeepCube state not available yet");
+    return;
+  }
+
+  const currentCube = new DeepCube(
+    deepCubeState.value.cp,
+    deepCubeState.value.co,
+    deepCubeState.value.ep,
+    deepCubeState.value.eo,
+  );
 
   if (!currentCube.isValid()) {
     console.error("Cube is physically impossible!");
@@ -835,13 +951,7 @@ watch(solveResult, (solution) => {
   if (solution && solution.length > 0) {
     const uiMoves = solution.map((m) => {
       const solverBase = m[0];
-      let solverModifier = m.slice(1);
-
-      // Topological neg-axes (D, L, B) require visually inverted dir mapping for CW/CCW
-      if (["D", "L", "B"].includes(solverBase)) {
-        if (solverModifier === "") solverModifier = "'";
-        else if (solverModifier === "'") solverModifier = "";
-      }
+      const solverModifier = m.slice(1);
 
       for (const [uiKey, mapping] of Object.entries(MOVE_MAP)) {
         if (
@@ -873,6 +983,29 @@ watch(cubies, () => {
   if (!pendingLogicalUpdate.value) return;
   pendingLogicalUpdate.value = false;
 
+  if (pendingCameraRotation.value) {
+    const { axis, angle } = pendingCameraRotation.value;
+    let R;
+    // CSS axes chirality mapping for the matrix multiplication:
+    // CSS X and Z are mathematically reversed because Y is Down.
+    // To match getCubieStyle rotations we must use the exact same signs.
+    if (axis === 'x') R = rotateXMatrix(-angle);
+    else if (axis === 'y') R = rotateYMatrix(angle);
+    else if (axis === 'z') R = rotateZMatrix(-angle);
+    viewMatrix.value = multiplyMatrices(viewMatrix.value, R);
+    pendingCameraRotation.value = null;
+  }
+
+  if (pendingDragMoveLabel.value) {
+    const id = `drag-${Date.now()}`;
+    movesHistory.value.push({
+      id,
+      label: pendingDragMoveLabel.value,
+      status: 'done',
+    });
+    pendingDragMoveLabel.value = null;
+  }
+
   if (currentMoveId.value !== null) {
     const idx = movesHistory.value.findIndex(
       (m) => m.id === currentMoveId.value,
@@ -890,6 +1023,7 @@ watch(cubies, () => {
   isAnimating.value = false;
   selectedCubie.value = null;
   selectedFace.value = null;
+  currentLayerRotation.value = 0;
   processNextMove();
 });
 
@@ -908,11 +1042,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="smart-cube-container">
+  <div class="smart-cube-container" @mousedown="onMouseDown">
     <div
       class="scene"
       :style="{ transform: `matrix3d(${viewMatrix.join(',')})` }"
-      @mousedown="onMouseDown"
     >
       <div class="cube">
         <div

@@ -15,6 +15,7 @@ const solverWorker = new Worker(
 
 // Reactive state
 const cubies = ref([]);
+const deepCubeState = ref(null);
 const isReady = ref(false);
 const isSolverReady = ref(false);
 const validationResult = ref(null);
@@ -25,9 +26,12 @@ worker.onmessage = (e) => {
   const { type, payload } = e.data;
   if (type === "STATE_UPDATE") {
     cubies.value = payload.cubies;
+    deepCubeState.value = payload.deepCubeState;
     isReady.value = true;
   } else if (type === "VALIDATION_RESULT") {
     validationResult.value = payload;
+  } else if (type === "SOLVE_RESULT") {
+    solveResult.value = payload;
   } else if (type === "ERROR") {
     console.error("Logic Worker Error:", payload);
   }
@@ -62,6 +66,13 @@ export function useCube() {
     });
   };
 
+  const rotateSlice = (axis, direction, steps = 1) => {
+    worker.postMessage({
+      type: "ROTATE_SLICE",
+      payload: { axis, direction, steps },
+    });
+  };
+
   const turn = (move) => {
     worker.postMessage({ type: "TURN", payload: { move } });
   };
@@ -81,6 +92,7 @@ export function useCube() {
 
   return {
     cubies: computed(() => cubies.value),
+    deepCubeState: computed(() => deepCubeState.value),
     isReady: computed(() => isReady.value),
     isSolverReady: computed(() => isSolverReady.value),
     validationResult: computed(() => validationResult.value),
@@ -88,6 +100,7 @@ export function useCube() {
     solveError: computed(() => solveError.value),
     initCube,
     rotateLayer,
+    rotateSlice,
     turn,
     validate,
     solve,

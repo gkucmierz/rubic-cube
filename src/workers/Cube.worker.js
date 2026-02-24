@@ -3,15 +3,22 @@ import { RubiksJSModel } from "../utils/CubeLogicAdapter.js";
 const cube = new RubiksJSModel();
 
 
+
 // Helper to send state update
 const sendUpdate = () => {
   try {
     const cubies = cube.toCubies();
-    // console.log('[Worker] Sending update with cubies:', cubies.length);
+    const { cp, co, ep, eo } = cube.state;
     postMessage({
       type: "STATE_UPDATE",
       payload: {
         cubies,
+        deepCubeState: {
+          cp: [...cp],
+          co: [...co],
+          ep: [...ep],
+          eo: [...eo],
+        },
       },
     });
   } catch (e) {
@@ -37,6 +44,13 @@ self.onmessage = (e) => {
       break;
     }
 
+    case "ROTATE_SLICE": {
+      const { axis, direction, steps = 1 } = payload;
+      cube.rotateSlice(axis, direction, steps);
+      sendUpdate();
+      break;
+    }
+
     case "TURN": {
       const { move } = payload;
       cube.applyTurn(move);
@@ -51,6 +65,7 @@ self.onmessage = (e) => {
         payload: { valid: validation.valid, errors: validation.errors },
       });
       break;
+
 
   }
 };

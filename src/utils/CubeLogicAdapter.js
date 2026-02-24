@@ -47,6 +47,15 @@ export class RubiksJSModel {
     this.visual.applyMove(move);
   }
 
+  rotateSlice(axis, direction, steps = 1) {
+    // A middle slice rotation (M, E, S) logically translates to rotating
+    // the two intersecting outer layers in the opposite direction, while
+    // the centers (the core abstract frame) remain perfectly stationary.
+    // The frontend simultaneously handles rotating the camera to complete the illusion.
+    this.rotateLayer(axis, 1, -direction, steps);
+    this.rotateLayer(axis, -1, -direction, steps);
+  }
+
   toCubies() {
     return this.visual.toCubies();
   }

@@ -7,9 +7,9 @@ let isKociembaReady = false;
 // Defer heavy initialization to allow the worker to be responsive initially
 setTimeout(() => {
   console.log("[SolverWorker] Kociemba solver initialization");
-  console.time("[SolverWorker] Kociemba solver initialization");
+  console.time("[SolverWorker] Kociemba solver initialized");
   KociembaSolver.init();
-  console.timeEnd("[SolverWorker] Kociemba solver initialization");
+  console.timeEnd("[SolverWorker] Kociemba solver initialized");
   isKociembaReady = true;
   postMessage({ type: "INIT_DONE" });
 }, 50);
