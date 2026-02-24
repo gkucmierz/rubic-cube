@@ -1,6 +1,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
-const emit = defineEmits(["move", "scramble", "solve"]);
+import { Locate, LocateFixed } from "lucide-vue-next";
+
+const props = defineProps({
+  isViewDefault: { type: Boolean, default: true },
+});
+
+const emit = defineEmits(["move", "scramble", "solve", "reset-camera"]);
 
 const showSolveDropdown = ref(false);
 
@@ -109,6 +115,18 @@ onUnmounted(() => {
         Scramble
       </button>
     </div>
+
+    <div class="bottom-right-controls">
+      <button
+        class="btn-neon move-btn camera-reset-btn"
+        :class="{ 'is-default': props.isViewDefault }"
+        :disabled="props.isViewDefault"
+        @click="emit('reset-camera')"
+      >
+        <LocateFixed v-if="props.isViewDefault" :size="18" />
+        <Locate v-else :size="18" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -200,5 +218,36 @@ onUnmounted(() => {
 
 .dropdown-item:focus {
   outline: none;
+}
+
+.bottom-right-controls {
+  position: absolute;
+  bottom: 72px;
+  right: 24px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.camera-reset-btn {
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s, transform 0.2s;
+}
+
+.camera-reset-btn.is-default {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.camera-reset-btn:not(.is-default):hover {
+  transform: scale(1.1);
 }
 </style>

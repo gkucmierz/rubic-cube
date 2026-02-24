@@ -69,8 +69,118 @@ const multiplyMatrices = (a, b) => {
   return result;
 };
 
+// Quaternion helpers for distortion-free rotation interpolation (SLERP)
+const matToQuat = (m) => {
+  const trace = m[0] + m[5] + m[10];
+  let w, x, y, z;
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1);
+    w = 0.25 / s;
+    x = (m[6] - m[9]) * s;
+    y = (m[8] - m[2]) * s;
+    z = (m[1] - m[4]) * s;
+  } else if (m[0] > m[5] && m[0] > m[10]) {
+    const s = 2 * Math.sqrt(1 + m[0] - m[5] - m[10]);
+    w = (m[6] - m[9]) / s;
+    x = 0.25 * s;
+    y = (m[4] + m[1]) / s;
+    z = (m[8] + m[2]) / s;
+  } else if (m[5] > m[10]) {
+    const s = 2 * Math.sqrt(1 + m[5] - m[0] - m[10]);
+    w = (m[8] - m[2]) / s;
+    x = (m[4] + m[1]) / s;
+    y = 0.25 * s;
+    z = (m[6] + m[9]) / s;
+  } else {
+    const s = 2 * Math.sqrt(1 + m[10] - m[0] - m[5]);
+    w = (m[1] - m[4]) / s;
+    x = (m[8] + m[2]) / s;
+    y = (m[6] + m[9]) / s;
+    z = 0.25 * s;
+  }
+  return { w, x, y, z };
+};
+
+const slerp = (q1, q2, t) => {
+  let dot = q1.w * q2.w + q1.x * q2.x + q1.y * q2.y + q1.z * q2.z;
+  let q2n = q2;
+  if (dot < 0) {
+    q2n = { w: -q2.w, x: -q2.x, y: -q2.y, z: -q2.z };
+    dot = -dot;
+  }
+  if (dot > 0.9995) {
+    const len = Math.sqrt(
+      (q1.w + t * (q2n.w - q1.w)) ** 2 + (q1.x + t * (q2n.x - q1.x)) ** 2 +
+      (q1.y + t * (q2n.y - q1.y)) ** 2 + (q1.z + t * (q2n.z - q1.z)) ** 2
+    );
+    return {
+      w: (q1.w + t * (q2n.w - q1.w)) / len,
+      x: (q1.x + t * (q2n.x - q1.x)) / len,
+      y: (q1.y + t * (q2n.y - q1.y)) / len,
+      z: (q1.z + t * (q2n.z - q1.z)) / len,
+    };
+  }
+  const theta = Math.acos(dot);
+  const sinTheta = Math.sin(theta);
+  const a = Math.sin((1 - t) * theta) / sinTheta;
+  const b = Math.sin(t * theta) / sinTheta;
+  return {
+    w: a * q1.w + b * q2n.w,
+    x: a * q1.x + b * q2n.x,
+    y: a * q1.y + b * q2n.y,
+    z: a * q1.z + b * q2n.z,
+  };
+};
+
+const quatToMat = (q) => {
+  const { w, x, y, z } = q;
+  const xx = x * x, yy = y * y, zz = z * z;
+  const xy = x * y, xz = x * z, yz = y * z;
+  const wx = w * x, wy = w * y, wz = w * z;
+  return [
+    1 - 2 * (yy + zz), 2 * (xy + wz),     2 * (xz - wy),     0,
+    2 * (xy - wz),     1 - 2 * (xx + zz), 2 * (yz + wx),     0,
+    2 * (xz + wy),     2 * (yz - wx),     1 - 2 * (xx + yy), 0,
+    0,                 0,                 0,                 1,
+  ];
+};
+
 // Initial orientation: Tilt X, then Spin Y
 const viewMatrix = ref(multiplyMatrices(rotateXMatrix(-25), rotateYMatrix(45)));
+const DEFAULT_VIEW_MATRIX = multiplyMatrices(rotateXMatrix(-25), rotateYMatrix(45));
+const isResettingCamera = ref(false);
+
+const isViewDefault = computed(() => {
+  const m = viewMatrix.value;
+  const d = DEFAULT_VIEW_MATRIX;
+  for (let i = 0; i < 16; i++) {
+    if (Math.abs(m[i] - d[i]) > 0.001) return false;
+  }
+  return true;
+});
+
+const resetCamera = () => {
+  if (isViewDefault.value || isResettingCamera.value) return;
+  isResettingCamera.value = true;
+  const startQuat = matToQuat(viewMatrix.value);
+  const targetQuat = matToQuat(DEFAULT_VIEW_MATRIX);
+  const startTime = performance.now();
+  const duration = 500;
+
+  const animate = (time) => {
+    const p = Math.min((time - startTime) / duration, 1);
+    const t = easeInOutCubic(p);
+    const q = slerp(startQuat, targetQuat, t);
+    viewMatrix.value = quatToMat(q);
+    if (p < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      viewMatrix.value = [...DEFAULT_VIEW_MATRIX];
+      isResettingCamera.value = false;
+    }
+  };
+  requestAnimationFrame(animate);
+};
 const SCALE = 100;
 const GAP = 0;
 const MIN_MOVES_COLUMN_GAP = 6;
@@ -174,14 +284,20 @@ const project = (v) => {
 // --- Interaction Logic ---
 
 const onMouseDown = (e) => {
-  if (isAnimating.value) return;
-
   isDragging.value = true;
   startX.value = e.clientX;
   startY.value = e.clientY;
   lastX.value = e.clientX;
   lastY.value = e.clientY;
   velocity.value = 0;
+
+  // During animations, only allow view rotation (camera drag), not layer manipulation
+  if (isAnimating.value) {
+    dragMode.value = "view";
+    selectedCubie.value = null;
+    return;
+  }
+
   currentLayerRotation.value = 0;
 
   const target = e.target.closest(".sticker");
@@ -312,7 +428,7 @@ const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
 };
 
 const onMouseUp = () => {
-  if (isDragging.value && activeLayer.value) {
+  if (isDragging.value && dragMode.value === "layer" && activeLayer.value) {
     snapRotation();
   }
   isDragging.value = false;
@@ -906,7 +1022,7 @@ const handleSolve = async (solverType) => {
   if (isAnimating.value) return;
 
   if (solverType === "kociemba" && !isSolverReady.value) {
-    showToast("wait for initialize solver", "info", {
+    showToast("wait for solver initialization", "info", {
       style: {
         background: "linear-gradient(to right, #b45309, #d97706)",
         color: "#ffffff"
@@ -1069,9 +1185,11 @@ onUnmounted(() => {
     </div>
 
     <CubeMoveControls
+      :is-view-default="isViewDefault"
       @move="applyMove"
       @scramble="scramble"
       @solve="handleSolve"
+      @reset-camera="resetCamera"
     />
 
     <MoveHistoryPanel
@@ -1081,6 +1199,8 @@ onUnmounted(() => {
       @add-moves="handleAddMoves"
       @open-add-modal="openAddModal"
     />
+
+
     <div
       v-if="isAddModalOpen"
       class="moves-modal-backdrop"
