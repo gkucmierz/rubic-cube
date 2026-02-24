@@ -171,6 +171,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   width: 16px;
+  min-width: 16px;
+  min-height: 24px;
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);

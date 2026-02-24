@@ -11,6 +11,7 @@ import { identityMatrix, rotateXMatrix, rotateYMatrix, rotateZMatrix, multiplyMa
 import { MOVE_MAP, INTERNAL_TO_UI, getAxisIndexForBase, getMathDirectionForBase, getDragMoveLabel, coerceStepsToSign, formatMoveLabel } from "../../utils/moveMapping.js";
 import { easeInOutCubic, easeInOutCubicDerivative, cubicEaseWithInitialVelocity, cubicEaseWithInitialVelocityDerivative } from "../../utils/easing.js";
 import { getFaceNormal as getFaceNormalRaw, getAllowedAxes as getAllowedAxesRaw, getAxisVector, cross, project as projectRaw } from "../../utils/cubeProjection.js";
+import { tokenReducer } from "../../utils/tokenReducer.js";
 
 const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
 const { isCubeTranslucent } = useSettings();
@@ -320,8 +321,22 @@ const finishMove = (steps, directionOverride = null) => {
 const movesHistory = ref([]);
 
 const displayMoves = computed(() => {
-  const list = movesHistory.value.slice();
+  // Reduce completed moves (consolidate consecutive same-face)
+  const done = movesHistory.value.filter((m) => m.status === 'done');
+  const inProgress = movesHistory.value.filter((m) => m.status === 'in_progress');
+  const doneLabels = done.map((m) => m.label);
+  const reduced = tokenReducer(doneLabels);
 
+  const list = reduced.tokens.map((label, idx) => ({
+    id: `r-${idx}`,
+    label,
+    status: 'done',
+  }));
+
+  // Append in-progress moves as-is
+  inProgress.forEach((m) => list.push(m));
+
+  // Append pending queue moves
   moveQueue.value.forEach((q, idx) => {
     const stepsMod = ((q.steps % 4) + 4) % 4;
     if (stepsMod === 0) return;
@@ -533,10 +548,8 @@ const stepProgrammaticAnimation = (time) => {
           (m) => m.id === currentMoveId.value,
         );
         if (idx !== -1) {
-          movesHistory.value[idx] = {
-            ...movesHistory.value[idx],
-            status: "done",
-          };
+          // 0 steps = full rotation, remove from history instead of marking done
+          movesHistory.value.splice(idx, 1);
         }
         currentMoveId.value = null;
       }
@@ -674,8 +687,10 @@ const applyMove = (move) => {
 
     currentAnim.v0 = Math.max(-3, Math.min(3, v0));
 
-    // Format the new label instantly
-    updateCurrentMoveLabel(displayBase, currentAnim.logicalSteps);
+    // Convert logicalSteps (math convention) to label steps (UI convention)
+    // For mathDir=-1 faces (R/U/F): display = logicalSteps (same sign)
+    // For mathDir=1 faces (D/L/B): display = -logicalSteps (inverted sign)
+    updateCurrentMoveLabel(displayBase, -mathDir * currentAnim.logicalSteps);
 
     return;
   }
