@@ -764,14 +764,7 @@ const handleSolve = async (solverType) => {
       duration: 3000,
       gravity: "top",
       position: "center",
-      style: {
-        background: "rgba(255, 255, 255, 0.1)",
-        color: "#fff",
-        backdropFilter: "blur(8px)",
-        borderRadius: "8px",
-        border: "1px solid rgba(255, 255, 255, 0.2)",
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
-      },
+      stopOnFocus: true,
     }).showToast();
     return;
   }
