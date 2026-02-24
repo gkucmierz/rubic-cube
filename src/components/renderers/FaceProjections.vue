@@ -7,9 +7,12 @@ const props = defineProps({
   viewMatrix: { type: Array, required: true },
   FACES: { type: Object, required: true },
   SCALE: { type: Number, default: 100 },
+  activeLayer: { type: Object, default: null },
+  currentLayerRotation: { type: Number, default: 0 },
+  animateLayers: { type: Boolean, default: false },
 });
 
-// The 6 face definitions with logical-space normals and grid axes
+// Face definitions with logical normals and grid axes
 const FACE_DEFS = computed(() => {
   const F = props.FACES;
   return [
@@ -22,109 +25,149 @@ const FACE_DEFS = computed(() => {
   ];
 });
 
-// Determine which 3 faces are hidden (transformed normal Z < 0 in CSS space)
-const hiddenFaces = computed(() => {
+// Which faces are hidden (for static cells)
+const hiddenFaceKeys = computed(() => {
   const m = props.viewMatrix;
-  return FACE_DEFS.value.filter((fd) => {
+  const keys = new Set();
+  for (const fd of FACE_DEFS.value) {
     const [nx, ny, nz] = fd.normal;
-    // viewMatrix is in CSS space where Y is inverted, so negate ny
-    const cssNy = -ny;
-    const tz = nx * m[2] + cssNy * m[6] + nz * m[10];
-    return tz < 0; // Pointing away from camera = hidden
-  });
+    const tz = nx * m[2] + (-ny) * m[6] + nz * m[10];
+    if (tz < 0) keys.add(fd.faceKey);
+  }
+  return keys;
 });
 
-// For each hidden face, extract the 3x3 grid of sticker colors and 3D transform
-const faceGrids = computed(() => {
-  const S = props.SCALE;
-  const dist = REAR_FACE_DISTANCE * S * 3; // distance in px (cube width = 3*SCALE)
+// Orientation: cells face INWARD (toward cube center)
+// Combined with backface-visibility: hidden, this means:
+// - hidden face cells: front faces camera → visible
+// - visible face cells: front faces away → invisible
+// - rotating cells crossing the plane: naturally swap visibility
+const inwardRotation = (nx, ny, nz) => {
+  if (nx === 1) return 'rotateY(-90deg)';
+  if (nx === -1) return 'rotateY(90deg)';
+  if (ny === 1) return 'rotateX(-90deg)';
+  if (ny === -1) return 'rotateX(90deg)';
+  if (nz === -1) return ''; // front faces +Z (toward camera)
+  return 'rotateY(180deg)'; // nz === 1: flip to face -Z (toward center)
+};
 
-  return hiddenFaces.value.map((fd) => {
-    const [nx, ny, nz] = fd.normal;
+// Build cells for one face
+const buildFaceCells = (fd, S, dist, al, rot, isRotatingOnly) => {
+  const [nx, ny, nz] = fd.normal;
+  const [gu, gv] = [fd.gridU, fd.gridV];
+  const orient = inwardRotation(nx, ny, nz);
+  const d = S * 1.5 + dist;
+  const cells = [];
 
-    // Get the 9 cubies on this face
-    const faceCubies = props.cubies.filter((c) => {
-      if (nx !== 0) return c.x === nx;
-      if (ny !== 0) return c.y === ny;
-      if (nz !== 0) return c.z === nz;
-      return false;
-    });
+  const faceCubies = props.cubies.filter((c) => {
+    if (nx !== 0) return c.x === nx;
+    if (ny !== 0) return c.y === ny;
+    if (nz !== 0) return c.z === nz;
+    return false;
+  });
 
-    // Build 3x3 grid: map cubie positions to grid cells
-    const [gu, gv] = [fd.gridU, fd.gridV];
-    const cells = [];
-    for (let v = 1; v >= -1; v--) { // top to bottom
-      for (let u = -1; u <= 1; u++) { // left to right
-        const cx = nx * Math.max(Math.abs(nx), 0) || u * gu[0] + v * gv[0];
-        const cy = ny * Math.max(Math.abs(ny), 0) || u * gu[1] + v * gv[1];
-        const cz = nz * Math.max(Math.abs(nz), 0) || u * gu[2] + v * gv[2];
+  for (let v = 1; v >= -1; v--) {
+    for (let u = -1; u <= 1; u++) {
+      const cx = nx * Math.max(Math.abs(nx), 0) || u * gu[0] + v * gv[0];
+      const cy = ny * Math.max(Math.abs(ny), 0) || u * gu[1] + v * gv[1];
+      const cz = nz * Math.max(Math.abs(nz), 0) || u * gu[2] + v * gv[2];
 
-        const cubie = faceCubies.find(
-          (c) => c.x === cx && c.y === cy && c.z === cz
-        );
-        const color = cubie ? cubie.faces[fd.faceKey] || 'black' : 'black';
-        cells.push(color);
+      const inLayer = al && (
+        (al.axis === 'x' && cx === al.index) ||
+        (al.axis === 'y' && cy === al.index) ||
+        (al.axis === 'z' && cz === al.index)
+      );
+
+      // Skip: if isRotatingOnly, only include rotating cells
+      // If not isRotatingOnly (hidden face), include non-rotating cells
+      if (isRotatingOnly && !inLayer) continue;
+      if (!isRotatingOnly && inLayer && props.animateLayers) continue;
+
+      const cubie = faceCubies.find(
+        (c) => c.x === cx && c.y === cy && c.z === cz
+      );
+      const color = cubie ? cubie.faces[fd.faceKey] || 'black' : 'black';
+
+      // 3D position
+      const posX = nx * d + u * gu[0] * S + v * gv[0] * S;
+      const posY = ny * d + u * gu[1] * S + v * gv[1] * S;
+      const posZ = nz * d + u * gu[2] * S + v * gv[2] * S;
+
+      let transform = `translate3d(${posX}px, ${-posY}px, ${posZ}px) ${orient}`;
+
+      // Rotating cells: prepend rotation around scene center (only in advanced mode)
+      if (props.animateLayers && inLayer && rot !== 0) {
+        let rotPre = '';
+        if (al.axis === 'x') rotPre = `rotateX(${-rot}deg)`;
+        else if (al.axis === 'y') rotPre = `rotateY(${rot}deg)`;
+        else if (al.axis === 'z') rotPre = `rotateZ(${-rot}deg)`;
+        transform = `${rotPre} ${transform}`;
       }
+
+      cells.push({
+        key: `${fd.faceKey}-${u}-${v}`,
+        color,
+        transform,
+      });
+    }
+  }
+  return cells;
+};
+
+// All cells to render
+const allCells = computed(() => {
+  const S = props.SCALE;
+  const dist = REAR_FACE_DISTANCE * S * 3;
+  const al = props.activeLayer;
+  const rot = props.currentLayerRotation;
+  const cells = [];
+
+  for (const fd of FACE_DEFS.value) {
+    const isHidden = hiddenFaceKeys.value.has(fd.faceKey);
+
+    if (isHidden) {
+      // Hidden face: render non-rotating cells (static projections)
+      cells.push(...buildFaceCells(fd, S, dist, al, rot, false));
     }
 
-    // Position: ALONG the normal direction (behind the cube from camera's perspective)
-    const d = S * 1.5 + dist;
-    const offsetX = nx * d;
-    const cssY = -ny * d; // Logical Y → CSS Y (inverted)
-    const offsetZ = nz * d;
+    // ALL faces: render rotating-layer cells (they swap via backface-visibility)
+    if (props.animateLayers && al && rot !== 0) {
+      cells.push(...buildFaceCells(fd, S, dist, al, rot, true));
+    }
+  }
 
-    let transform = `translate3d(${offsetX}px, ${cssY}px, ${offsetZ}px)`;
-
-    // Rotate panel to face OUTWARD from cube center
-    if (nx === 1) transform += ' rotateY(90deg)';
-    else if (nx === -1) transform += ' rotateY(-90deg)';
-    else if (ny === 1) transform += ' rotateX(90deg)';
-    else if (ny === -1) transform += ' rotateX(-90deg)';
-    else if (nz === -1) transform += ' rotateY(180deg)';
-    // nz === 1: default orientation (front faces +z)
-
-    return {
-      faceKey: fd.faceKey,
-      cells,
-      transform,
-    };
-  });
+  return cells;
 });
 </script>
 
 <template>
-  <div
-    v-for="grid in faceGrids"
-    :key="grid.faceKey"
-    class="face-projection"
-    :style="{ transform: grid.transform }"
-  >
+  <div class="face-projections-root">
     <div
-      v-for="(color, idx) in grid.cells"
-      :key="idx"
+      v-for="cell in allCells"
+      :key="cell.key"
       class="proj-cell"
-      :class="color"
+      :class="cell.color"
+      :style="{ transform: cell.transform }"
     ></div>
   </div>
 </template>
 
 <style scoped>
-.face-projection {
+.face-projections-root {
   position: absolute;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  width: 300px;
-  height: 300px;
-  /* Center the grid on its position */
-  margin-left: -150px;
-  margin-top: -150px;
+  transform-style: preserve-3d;
 }
 
 .proj-cell {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  margin-left: -50px;
+  margin-top: -50px;
   box-sizing: border-box;
   background: #000;
   border: 1px solid #000;
-  position: relative;
+  backface-visibility: hidden;
 }
 
 .proj-cell::after {

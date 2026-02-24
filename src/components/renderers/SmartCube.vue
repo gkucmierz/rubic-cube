@@ -15,7 +15,7 @@ import { getFaceNormal as getFaceNormalRaw, getAllowedAxes as getAllowedAxesRaw,
 import { tokenReducer } from "../../utils/tokenReducer.js";
 
 const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
-const { isCubeTranslucent, showFaceProjections } = useSettings();
+const { isCubeTranslucent, projectionMode } = useSettings();
 
 // Bind FACES and viewMatrix to imported helpers
 const getFaceNormal = (face) => getFaceNormalRaw(face, FACES);
@@ -881,11 +881,14 @@ onUnmounted(() => {
       </div>
 
       <FaceProjections
-        v-if="showFaceProjections"
+        v-if="projectionMode > 0"
         :cubies="cubies"
         :view-matrix="viewMatrix"
         :FACES="FACES"
         :SCALE="SCALE"
+        :active-layer="activeLayer"
+        :current-layer-rotation="currentLayerRotation"
+        :animate-layers="projectionMode === 2"
       />
     </div>
 

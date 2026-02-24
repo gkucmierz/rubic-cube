@@ -8,16 +8,17 @@ try {
   }
 } catch (e) { }
 
-let initialShowFaceProjections = false;
+// 0 = off, 1 = simple projections, 2 = advanced (animated layers)
+let initialProjectionMode = 0;
 try {
-  const stored = localStorage.getItem("showFaceProjections");
+  const stored = localStorage.getItem("projectionMode");
   if (stored !== null) {
-    initialShowFaceProjections = stored === "true";
+    initialProjectionMode = Math.min(2, Math.max(0, parseInt(stored, 10) || 0));
   }
 } catch (e) { }
 
 const isCubeTranslucent = ref(initialCubeTranslucent);
-const showFaceProjections = ref(initialShowFaceProjections);
+const projectionMode = ref(initialProjectionMode);
 
 export function useSettings() {
   const toggleCubeTranslucent = () => {
@@ -27,17 +28,17 @@ export function useSettings() {
     } catch (e) { }
   };
 
-  const toggleFaceProjections = () => {
-    showFaceProjections.value = !showFaceProjections.value;
+  const cycleProjectionMode = () => {
+    projectionMode.value = (projectionMode.value + 1) % 3;
     try {
-      localStorage.setItem("showFaceProjections", String(showFaceProjections.value));
+      localStorage.setItem("projectionMode", String(projectionMode.value));
     } catch (e) { }
   };
 
   return {
     isCubeTranslucent,
     toggleCubeTranslucent,
-    showFaceProjections,
-    toggleFaceProjections,
+    projectionMode,
+    cycleProjectionMode,
   };
 }

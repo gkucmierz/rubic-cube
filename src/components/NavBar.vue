@@ -1,9 +1,9 @@
 <script setup>
-import { Sun, Moon, Grid2x2, Layers } from "lucide-vue-next";
-import { ref, onMounted } from "vue";
+import { Sun, Moon, Grid2x2, Layers, Layers2, LayersPlus } from "lucide-vue-next";
+import { ref, onMounted, computed } from "vue";
 import { useSettings } from "../composables/useSettings";
 
-const { isCubeTranslucent, toggleCubeTranslucent, showFaceProjections, toggleFaceProjections } = useSettings();
+const { isCubeTranslucent, toggleCubeTranslucent, projectionMode, cycleProjectionMode } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
@@ -16,6 +16,12 @@ const setTheme = (dark) => {
 const toggleTheme = () => {
   setTheme(!isDark.value);
 };
+
+const projectionTitle = computed(() => {
+  if (projectionMode.value === 0) return 'Show rear face projections';
+  if (projectionMode.value === 1) return 'Enable animated projections';
+  return 'Disable projections';
+});
 
 onMounted(() => {
   const savedTheme = localStorage.getItem("theme");
@@ -40,33 +46,31 @@ onMounted(() => {
         @click="toggleCubeTranslucent"
         :title="
           isCubeTranslucent
-            ? 'Wyłącz przezroczystość kostki'
-            : 'Włącz przezroczystość kostki'
+            ? 'Disable cube transparency'
+            : 'Enable cube transparency'
         "
         :class="{ active: isCubeTranslucent }"
       >
         <Grid2x2 :size="20" />
       </button>
 
-      <!-- Face Projections Toggle -->
+      <!-- Face Projections Toggle (3-state) -->
       <button
         class="btn-neon nav-btn icon-only"
-        @click="toggleFaceProjections"
-        :title="
-          showFaceProjections
-            ? 'Ukryj podgląd tylnych ścian'
-            : 'Pokaż podgląd tylnych ścian'
-        "
-        :class="{ active: showFaceProjections }"
+        @click="cycleProjectionMode"
+        :title="projectionTitle"
+        :class="{ active: projectionMode > 0 }"
       >
-        <Layers :size="20" />
+        <Layers2 v-if="projectionMode === 0" :size="20" />
+        <Layers v-else-if="projectionMode === 1" :size="20" />
+        <LayersPlus v-else :size="20" />
       </button>
 
       <!-- Theme Toggle -->
       <button
         class="btn-neon nav-btn icon-only"
         @click="toggleTheme"
-        :title="isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny'"
+        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
       >
         <Sun v-if="isDark" :size="20" />
         <Moon v-else :size="20" />
