@@ -1,9 +1,9 @@
 <script setup>
-import { Sun, Moon, Grid2x2 } from "lucide-vue-next";
+import { Sun, Moon, Grid2x2, Layers } from "lucide-vue-next";
 import { ref, onMounted } from "vue";
 import { useSettings } from "../composables/useSettings";
 
-const { isCubeTranslucent, toggleCubeTranslucent } = useSettings();
+const { isCubeTranslucent, toggleCubeTranslucent, showFaceProjections, toggleFaceProjections } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
@@ -46,6 +46,20 @@ onMounted(() => {
         :class="{ active: isCubeTranslucent }"
       >
         <Grid2x2 :size="20" />
+      </button>
+
+      <!-- Face Projections Toggle -->
+      <button
+        class="btn-neon nav-btn icon-only"
+        @click="toggleFaceProjections"
+        :title="
+          showFaceProjections
+            ? 'Ukryj podgląd tylnych ścian'
+            : 'Pokaż podgląd tylnych ścian'
+        "
+        :class="{ active: showFaceProjections }"
+      >
+        <Layers :size="20" />
       </button>
 
       <!-- Theme Toggle -->

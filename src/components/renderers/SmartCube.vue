@@ -5,6 +5,7 @@ import { useSettings } from "../../composables/useSettings";
 import { LAYER_ANIMATION_DURATION, MIDDLE_SLICES_ENABLED } from "../../config/settings";
 import CubeMoveControls from "./CubeMoveControls.vue";
 import MoveHistoryPanel from "./MoveHistoryPanel.vue";
+import FaceProjections from "./FaceProjections.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
 import { showToast } from "../../utils/toastHelper.js";
 import { identityMatrix, rotateXMatrix, rotateYMatrix, rotateZMatrix, multiplyMatrices, matToQuat, slerp, quatToMat } from "../../utils/matrix.js";
@@ -14,7 +15,7 @@ import { getFaceNormal as getFaceNormalRaw, getAllowedAxes as getAllowedAxesRaw,
 import { tokenReducer } from "../../utils/tokenReducer.js";
 
 const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
-const { isCubeTranslucent } = useSettings();
+const { isCubeTranslucent, showFaceProjections } = useSettings();
 
 // Bind FACES and viewMatrix to imported helpers
 const getFaceNormal = (face) => getFaceNormalRaw(face, FACES);
@@ -878,6 +879,14 @@ onUnmounted(() => {
           ></div>
         </div>
       </div>
+
+      <FaceProjections
+        v-if="showFaceProjections"
+        :cubies="cubies"
+        :view-matrix="viewMatrix"
+        :FACES="FACES"
+        :SCALE="SCALE"
+      />
     </div>
 
     <CubeMoveControls
@@ -1146,22 +1155,22 @@ onUnmounted(() => {
 
 /* Colors - apply to the pseudo-element */
 .white::after {
-  background: #e0e0e0;
+  background: var(--sticker-white);
 }
 .yellow::after {
-  background: #ffd500;
+  background: var(--sticker-yellow);
 }
 .green::after {
-  background: #009e60;
+  background: var(--sticker-green);
 }
 .blue::after {
-  background: #0051ba;
+  background: var(--sticker-blue);
 }
 .orange::after {
-  background: #ff5800;
+  background: var(--sticker-orange);
 }
 .red::after {
-  background: #c41e3a;
+  background: var(--sticker-red);
 }
 
 /* Black internal faces - no sticker needed */

@@ -42,6 +42,14 @@
   --button-active-shadow: 0 0 20px rgba(79, 172, 254, 0.4);
   --cube-edge-color: #333333;
   --title-gradient: linear-gradient(45deg, #00f2fe, #4facfe);
+
+  /* Cube sticker colors */
+  --sticker-white: #e0e0e0;
+  --sticker-yellow: #ffd500;
+  --sticker-green: #009e60;
+  --sticker-blue: #0051ba;
+  --sticker-orange: #ff5800;
+  --sticker-red: #c41e3a;
 }
 
 :root[data-theme="light"] {
@@ -81,6 +89,7 @@ a {
   color: #646cff;
   text-decoration: inherit;
 }
+
 a:hover {
   color: #535bf2;
 }
@@ -113,9 +122,11 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
 button:hover {
   border-color: #646cff;
 }
+
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
@@ -191,9 +202,11 @@ button.btn-neon.icon-only {
     color: #213547;
     background-color: #ffffff;
   }
+
   a:hover {
     color: #747bff;
   }
+
   button {
     background-color: #f9f9f9;
   }
