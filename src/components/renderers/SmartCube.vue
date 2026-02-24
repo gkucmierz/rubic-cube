@@ -6,17 +6,59 @@ import { LAYER_ANIMATION_DURATION } from "../../config/animationSettings";
 import CubeMoveControls from "./CubeMoveControls.vue";
 import MoveHistoryPanel from "./MoveHistoryPanel.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
-import { KociembaSolver } from "../../utils/solvers/KociembaSolver.js";
-import { BeginnerSolver } from "../../utils/solvers/BeginnerSolver.js";
-import Toastify from "toastify-js";
+import { showToast } from "../../utils/toastHelper.js";
 
-const { cubies, initCube, rotateLayer, turn, FACES } = useCube();
+const { cubies, initCube, rotateLayer, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
 const { isCubeTranslucent } = useSettings();
 
 // --- Visual State ---
-const rx = ref(-25);
-const ry = ref(45);
-const rz = ref(0);
+// viewMatrix is a 4x4 matrix (16 floats) representing the scene rotation.
+// Initial state: Tilt X by -25deg, Rotate Y by 45deg.
+const identityMatrix = () => [
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1
+];
+
+const rotateXMatrix = (deg) => {
+  const rad = (deg * Math.PI) / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return [
+    1, 0, 0, 0,
+    0, c, s, 0,
+    0, -s, c, 0,
+    0, 0, 0, 1
+  ];
+};
+
+const rotateYMatrix = (deg) => {
+  const rad = (deg * Math.PI) / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return [
+    c, 0, -s, 0,
+    0, 1, 0, 0,
+    s, 0, c, 0,
+    0, 0, 0, 1
+  ];
+};
+
+const multiplyMatrices = (a, b) => {
+  const result = new Array(16).fill(0);
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      for (let k = 0; k < 4; k++) {
+        result[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
+      }
+    }
+  }
+  return result;
+};
+
+// Initial orientation: Tilt X, then Spin Y
+const viewMatrix = ref(multiplyMatrices(rotateXMatrix(-25), rotateYMatrix(45)));
 const SCALE = 100;
 const GAP = 0;
 const MIN_MOVES_COLUMN_GAP = 6;
@@ -99,24 +141,15 @@ const cross = (a, b) => ({
   z: a.x * b.y - a.y * b.x,
 });
 
-// Project 3D vector to 2D screen space based on current view (rx, ry, rz)
+// Project 3D vector to 2D screen space based on current viewMatrix
 const project = (v) => {
-  const radX = (rx.value * Math.PI) / 180;
-  const radY = (ry.value * Math.PI) / 180;
-  const radZ = (rz.value * Math.PI) / 180;
-
-  let x1 = v.x * Math.cos(radZ) - v.y * Math.sin(radZ);
-  let y1 = v.x * Math.sin(radZ) + v.y * Math.cos(radZ);
-  let z1 = v.z;
-
-  let x2 = x1 * Math.cos(radY) + z1 * Math.sin(radY);
-  let y2 = y1;
-  let z2 = -x1 * Math.sin(radY) + z1 * Math.cos(radY);
-
-  let x3 = x2;
-  let y3 = y2 * Math.cos(radX) - z2 * Math.sin(radX);
-
-  return { x: x3, y: y3 };
+  const m = viewMatrix.value;
+  // Apply rotation matrix: v' = M * v
+  // (Ignoring translation/w for pure rotation projection)
+  const x = v.x * m[0] + v.y * m[4] + v.z * m[8];
+  const y = v.x * m[1] + v.y * m[5] + v.z * m[9];
+  // z ignored for 2D projection
+  return { x, y };
 };
 
 // --- Interaction Logic ---
@@ -140,16 +173,11 @@ const onMouseDown = (e) => {
     selectedCubie.value = { ...cubie }; // Snapshot position
     selectedFace.value = face;
 
-    // Check if center piece (has 2 zero coordinates)
-    // Centers have sum of absolute coords = 1
-    // Core (0,0,0) has sum = 0
+    // Mechanical Realism Rules:
+    // Centers (absSum <= 1) are "Stiff" (part of the core frame). Dragging them rotates the View.
+    // Corners/Edges (absSum > 1) are "Moving Parts". Dragging them rotates the Layer.
     const absSum = Math.abs(cubie.x) + Math.abs(cubie.y) + Math.abs(cubie.z);
-    const isCenterOrCore = absSum <= 1;
-
-    // Mechanical Realism:
-    // Centers are "Stiff" (part of the core frame). Dragging them rotates the View.
-    // Corners/Edges are "Moving Parts". Dragging them rotates the Layer.
-    dragMode.value = isCenterOrCore ? "view" : "layer";
+    dragMode.value = absSum <= 1 ? "view" : "layer";
   } else {
     dragMode.value = "view";
     selectedCubie.value = null;
@@ -163,8 +191,19 @@ const onMouseMove = (e) => {
   const dy = e.clientY - lastY.value;
 
   if (dragMode.value === "view") {
-    ry.value += dx * 0.5;
-    rx.value += dy * 0.5;
+    // Relative View Rotation:
+    // Dragging mouse Down (positive dy) should pull the TOP of the cube towards the user.
+    // In standard math, rotating a cube around World X-axis by positive angle tilts it BACK.
+    // So we use -dy for the rotation angle.
+    const deltaX = rotateXMatrix(-dy * 0.5);
+    const deltaY = rotateYMatrix(dx * 0.5);
+
+    // Order matters: Apply deltas on top of current orientation.
+    // RotationY(dx) * RotationX(dy) * currentMatrix
+    // Result: Horizontal dragging always spins around screen Y,
+    // vertical dragging always tilts around screen X.
+    const combinedDelta = multiplyMatrices(deltaY, deltaX);
+    viewMatrix.value = multiplyMatrices(combinedDelta, viewMatrix.value);
   } else if (dragMode.value === "layer" && selectedCubie.value) {
     const totalDx = e.clientX - startX.value;
     const totalDy = e.clientY - startY.value;
@@ -189,9 +228,9 @@ const handleLayerDrag = (totalDx, totalDy, dx, dy) => {
 
     // Analyze candidates
     axes.forEach((axis) => {
-      // Tangent = Axis x Normal
+      // Tangent = Normal x Axis
       // This is the 3D direction of motion for Positive Rotation around this Axis
-      const t3D = cross(getAxisVector(axis), faceNormal);
+      const t3D = cross(faceNormal, getAxisVector(axis));
       const t2D = project(t3D);
       const len = Math.sqrt(t2D.x ** 2 + t2D.y ** 2);
 
@@ -286,8 +325,17 @@ const finishMove = (steps, directionOverride = null) => {
     const direction =
       directionOverride !== null ? directionOverride : steps > 0 ? 1 : -1;
 
+    // LOGICAL SYNC (CRITICAL):
+    // Our visual rotation signs in getCubieStyle and tangent calc are now aligned.
+    // However, some axes might still be inverted based on coordinate system (Right-handed vs CSS).
+    let finalDirection = direction;
+
+    // Y-axis spin in project/matrix logic vs cubic logic often needs swap
+    if (axis === "y") finalDirection *= -1;
+    if (axis === "z") finalDirection *= -1;
+
     pendingLogicalUpdate.value = true;
-    rotateLayer(axis, index, direction, count);
+    rotateLayer(axis, index, finalDirection, count);
   }
 };
 
@@ -448,13 +496,14 @@ const getCubieStyle = (c) => {
       // Logic X=1 (Right). CSS +X is Right.
 
       // Rotations:
-      // CSS rotateX: + is Top->Back.
-      // CSS rotateY: + is Right->Back (Spin Right).
-      // CSS rotateZ: + is Top->Right (Clockwise).
+      // CSS rotateX: + is Top->Back. (Standard R direction)
+      // CSS rotateY: + is Right->Back. (Spin Right)
+      // CSS rotateZ: + is Top->Right. (Clockwise)
 
-      if (axis === "x") transform = `rotateX(${-rot}deg) ` + transform;
-      if (axis === "y") transform = `rotateY(${-rot}deg) ` + transform;
-      if (axis === "z") transform = `rotateZ(${rot}deg) ` + transform;
+      // We align rot so that +90 degrees visually matches logical direction=1 (CW)
+      if (axis === "x") transform = `rotateX(${rot}deg) ` + transform;
+      if (axis === "y") transform = `rotateY(${rot}deg) ` + transform;
+      if (axis === "z") transform = `rotateZ(${-rot}deg) ` + transform;
     }
   }
 
@@ -750,6 +799,16 @@ const scramble = () => {
 const handleSolve = async (solverType) => {
   if (isAnimating.value) return;
 
+  if (solverType === "kociemba" && !isSolverReady.value) {
+    showToast("wait for initialize solver", "info", {
+      style: {
+        background: "linear-gradient(to right, #b45309, #d97706)",
+        color: "#ffffff"
+      }
+    });
+    return;
+  }
+
   const currentCube = DeepCube.fromCubies(cubies.value);
 
   if (!currentCube.isValid()) {
@@ -759,30 +818,20 @@ const handleSolve = async (solverType) => {
 
   // Already solved? (Identity check)
   if (currentCube.isSolved()) {
-    Toastify({
-      text: "scramble cube first",
-      duration: 3000,
-      gravity: "top",
-      position: "center",
-      stopOnFocus: true,
-    }).showToast();
+    showToast("scramble cube first", "info");
     return;
   }
 
-  let solution = [];
-  try {
-    if (solverType === "kociemba") {
-      const solver = new KociembaSolver(currentCube);
-      solution = solver.solve();
-    } else if (solverType === "beginner") {
-      const solver = new BeginnerSolver(currentCube);
-      solution = solver.solve();
-    }
-  } catch (e) {
-    console.error("Solver exception:", e);
-    return;
-  }
+  solve(solverType, {
+    cp: currentCube.cp,
+    co: currentCube.co,
+    ep: currentCube.ep,
+    eo: currentCube.eo,
+  });
+};
 
+// Listen for solution from worker
+watch(solveResult, (solution) => {
   if (solution && solution.length > 0) {
     const uiMoves = solution.map((m) => {
       const solverBase = m[0];
@@ -802,12 +851,23 @@ const handleSolve = async (solverType) => {
           return uiKey;
         }
       }
-      return m;
-    });
+      return null;
+    }).filter(m => m !== null);
 
     uiMoves.forEach((m) => applyMove(m));
   }
-};
+});
+
+watch(solveError, (err) => {
+  if (err) {
+    showToast(err, "info", {
+      style: {
+        background: "linear-gradient(to right, #b45309, #d97706)",
+        color: "#ffffff"
+      }
+    });
+  }
+});
 
 watch(cubies, () => {
   if (!pendingLogicalUpdate.value) return;
@@ -851,7 +911,8 @@ onUnmounted(() => {
   <div class="smart-cube-container">
     <div
       class="scene"
-      :style="{ transform: `rotateX(${rx}deg) rotateY(${ry}deg)` }"
+      :style="{ transform: `matrix3d(${viewMatrix.join(',')})` }"
+      @mousedown="onMouseDown"
     >
       <div class="cube">
         <div

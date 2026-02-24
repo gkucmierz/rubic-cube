@@ -51,5 +51,6 @@ self.onmessage = (e) => {
         payload: { valid: validation.valid, errors: validation.errors },
       });
       break;
+
   }
 };

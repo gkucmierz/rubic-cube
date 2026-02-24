@@ -1,16 +1,25 @@
 import { ref, computed } from "vue";
 import { COLORS, FACES } from "../utils/CubeModel";
 
-// Singleton worker
+// Singleton logic worker
 const worker = new Worker(
   new URL("../workers/Cube.worker.js", import.meta.url),
+  { type: "module" },
+);
+
+// Singleton solver worker
+const solverWorker = new Worker(
+  new URL("../workers/Solver.worker.js", import.meta.url),
   { type: "module" },
 );
 
 // Reactive state
 const cubies = ref([]);
 const isReady = ref(false);
+const isSolverReady = ref(false);
 const validationResult = ref(null);
+const solveResult = ref(null);
+const solveError = ref(null);
 
 worker.onmessage = (e) => {
   const { type, payload } = e.data;
@@ -20,7 +29,21 @@ worker.onmessage = (e) => {
   } else if (type === "VALIDATION_RESULT") {
     validationResult.value = payload;
   } else if (type === "ERROR") {
-    console.error("Worker Error:", payload);
+    console.error("Logic Worker Error:", payload);
+  }
+};
+
+solverWorker.onmessage = (e) => {
+  const { type, payload } = e.data;
+  if (type === "SOLVE_RESULT") {
+    solveResult.value = payload;
+  } else if (type === "SOLVE_ERROR") {
+    // Error doesn't necessarily block execution, it just provides UI feedback
+    solveError.value = payload;
+  } else if (type === "INIT_DONE") {
+    isSolverReady.value = true;
+  } else if (type === "ERROR") {
+    console.error("Solver Worker Error:", payload);
   }
 };
 
@@ -47,14 +70,27 @@ export function useCube() {
     worker.postMessage({ type: "VALIDATE" });
   };
 
+  const solve = (solverType, cubeState) => {
+    solveResult.value = null;
+    solveError.value = null;
+    solverWorker.postMessage({
+      type: "SOLVE",
+      payload: { solverType, cubeState },
+    });
+  };
+
   return {
     cubies: computed(() => cubies.value),
     isReady: computed(() => isReady.value),
+    isSolverReady: computed(() => isSolverReady.value),
     validationResult: computed(() => validationResult.value),
+    solveResult: computed(() => solveResult.value),
+    solveError: computed(() => solveError.value),
     initCube,
     rotateLayer,
     turn,
     validate,
+    solve,
     COLORS,
     FACES,
   };

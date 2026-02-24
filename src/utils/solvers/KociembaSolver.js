@@ -1,10 +1,11 @@
 import Cube from "cubejs";
 
-// Initialize the core pruning tables on module load
-Cube.initSolver();
 import { DeepCube, CORNERS, EDGES } from "../DeepCube.js";
 
 export class KociembaSolver {
+  static init() {
+    Cube.initSolver();
+  }
   constructor(cube) {
     this.cube = cube.clone();
   }
