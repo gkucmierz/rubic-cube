@@ -19,6 +19,7 @@ try {
 
 const isCubeTranslucent = ref(initialCubeTranslucent);
 const projectionMode = ref(initialProjectionMode);
+const scanMode = ref(false); // Non-persisted — always starts off
 
 export function useSettings() {
   const toggleCubeTranslucent = () => {
@@ -35,10 +36,16 @@ export function useSettings() {
     } catch (e) { }
   };
 
+  const toggleScanMode = () => {
+    scanMode.value = !scanMode.value;
+  };
+
   return {
     isCubeTranslucent,
     toggleCubeTranslucent,
     projectionMode,
     cycleProjectionMode,
+    scanMode,
+    toggleScanMode,
   };
 }

@@ -138,6 +138,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   z-index: 50;
+  opacity: 0.0;
 }
 
 .controls-left {

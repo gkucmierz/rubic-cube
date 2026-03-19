@@ -1,9 +1,10 @@
 <script setup>
-import { Sun, Moon, Grid2x2, Layers, Layers2, LayersPlus } from "lucide-vue-next";
+import { Sun, Moon, Grid2x2, Layers, Layers2, LayersPlus, Scan } from "lucide-vue-next";
 import { ref, onMounted, computed } from "vue";
 import { useSettings } from "../composables/useSettings";
+import { NAVBAR_HEIGHT } from "../config/ui.js";
 
-const { isCubeTranslucent, toggleCubeTranslucent, projectionMode, cycleProjectionMode } = useSettings();
+const { isCubeTranslucent, toggleCubeTranslucent, projectionMode, cycleProjectionMode, scanMode, toggleScanMode } = useSettings();
 const isDark = ref(true);
 
 const setTheme = (dark) => {
@@ -40,6 +41,16 @@ onMounted(() => {
     </div>
 
     <div class="nav-container">
+      <!-- Scan Mode Toggle -->
+      <button
+        class="btn-neon nav-btn icon-only"
+        @click="toggleScanMode"
+        :title="scanMode ? 'Exit scan mode' : 'Scan physical cube'"
+        :class="{ active: scanMode }"
+      >
+        <Scan :size="20" />
+      </button>
+
       <!-- Cube Opacity Toggle -->
       <button
         class="btn-neon nav-btn icon-only"
@@ -85,7 +96,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
-  height: 70px;
+  height: v-bind('NAVBAR_HEIGHT + "px"');
   width: 100%;
   box-sizing: border-box;
   position: absolute;

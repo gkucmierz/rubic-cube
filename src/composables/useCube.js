@@ -7,8 +7,9 @@ const worker = new Worker(
   { type: "module" },
 );
 
-// Singleton solver worker
-const solverWorker = new Worker(
+// Singleton solver worker - Skip in generator mode to save resources
+const isGenerator = typeof window !== 'undefined' && window.location.search.includes('mode=generator');
+const solverWorker = isGenerator ? null : new Worker(
   new URL("../workers/Solver.worker.js", import.meta.url),
   { type: "module" },
 );
@@ -37,19 +38,21 @@ worker.onmessage = (e) => {
   }
 };
 
-solverWorker.onmessage = (e) => {
-  const { type, payload } = e.data;
-  if (type === "SOLVE_RESULT") {
-    solveResult.value = payload;
-  } else if (type === "SOLVE_ERROR") {
-    // Error doesn't necessarily block execution, it just provides UI feedback
-    solveError.value = payload;
-  } else if (type === "INIT_DONE") {
-    isSolverReady.value = true;
-  } else if (type === "ERROR") {
-    console.error("Solver Worker Error:", payload);
-  }
-};
+if (solverWorker) {
+  solverWorker.onmessage = (e) => {
+    const { type, payload } = e.data;
+    if (type === "SOLVE_RESULT") {
+      solveResult.value = payload;
+    } else if (type === "SOLVE_ERROR") {
+      // Error doesn't necessarily block execution, it just provides UI feedback
+      solveError.value = payload;
+    } else if (type === "INIT_DONE") {
+      isSolverReady.value = true;
+    } else if (type === "ERROR") {
+      console.error("Solver Worker Error:", payload);
+    }
+  };
+}
 
 // Init worker
 worker.postMessage({ type: "INIT" });
@@ -82,6 +85,7 @@ export function useCube() {
   };
 
   const solve = (solverType, cubeState) => {
+    if (!solverWorker) return;
     solveResult.value = null;
     solveError.value = null;
     solverWorker.postMessage({

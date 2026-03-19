@@ -10,18 +10,20 @@ const props = defineProps({
   activeLayer: { type: Object, default: null },
   currentLayerRotation: { type: Number, default: 0 },
   animateLayers: { type: Boolean, default: false },
+  scanMode: { type: Boolean, default: false },
+  scannedColors: { type: Object, default: () => ({}) },
 });
 
 // Face definitions with logical normals and grid axes
 const FACE_DEFS = computed(() => {
   const F = props.FACES;
   return [
-    { face: F.FRONT, normal: [0, 0, 1], gridU: [1, 0, 0], gridV: [0, 1, 0], faceKey: 'front' },
-    { face: F.BACK, normal: [0, 0, -1], gridU: [-1, 0, 0], gridV: [0, 1, 0], faceKey: 'back' },
-    { face: F.RIGHT, normal: [1, 0, 0], gridU: [0, 0, -1], gridV: [0, 1, 0], faceKey: 'right' },
-    { face: F.LEFT, normal: [-1, 0, 0], gridU: [0, 0, 1], gridV: [0, 1, 0], faceKey: 'left' },
-    { face: F.UP, normal: [0, 1, 0], gridU: [1, 0, 0], gridV: [0, 0, -1], faceKey: 'up' },
-    { face: F.DOWN, normal: [0, -1, 0], gridU: [1, 0, 0], gridV: [0, 0, 1], faceKey: 'down' },
+    { face: F.FRONT, normal: [0, 0, 1], gridU: [1, 0, 0], gridV: [0, 1, 0], faceKey: 'front', id: 1 },
+    { face: F.BACK, normal: [0, 0, -1], gridU: [-1, 0, 0], gridV: [0, 1, 0], faceKey: 'back', id: 2 },
+    { face: F.RIGHT, normal: [1, 0, 0], gridU: [0, 0, -1], gridV: [0, 1, 0], faceKey: 'right', id: 3 },
+    { face: F.LEFT, normal: [-1, 0, 0], gridU: [0, 0, 1], gridV: [0, 1, 0], faceKey: 'left', id: 4 },
+    { face: F.UP, normal: [0, 1, 0], gridU: [1, 0, 0], gridV: [0, 0, -1], faceKey: 'up', id: 5 },
+    { face: F.DOWN, normal: [0, -1, 0], gridU: [1, 0, 0], gridV: [0, 0, 1], faceKey: 'down', id: 6 },
   ];
 });
 
@@ -86,7 +88,19 @@ const buildFaceCells = (fd, S, dist, al, rot, isRotatingOnly) => {
       const cubie = faceCubies.find(
         (c) => c.x === cx && c.y === cy && c.z === cz
       );
-      const color = cubie ? cubie.faces[fd.faceKey] || 'black' : 'black';
+
+      let color = 'black';
+      let confidence = null;
+      if (props.scanMode) {
+        if (cubie && props.scannedColors[`${cubie.id}:${fd.faceKey}`]) {
+          color = props.scannedColors[`${cubie.id}:${fd.faceKey}`].color;
+          confidence = props.scannedColors[`${cubie.id}:${fd.faceKey}`].confidence;
+        } else {
+          color = 'white';
+        }
+      } else {
+        color = cubie ? cubie.faces[fd.faceKey] || 'black' : 'black';
+      }
 
       // 3D position
       const posX = nx * d + u * gu[0] * S + v * gv[0] * S;
@@ -104,10 +118,14 @@ const buildFaceCells = (fd, S, dist, al, rot, isRotatingOnly) => {
         transform = `${rotPre} ${transform}`;
       }
 
+      const cellIndex = (1 - v) * 3 + (u + 2);
+
       cells.push({
         key: `${fd.faceKey}-${u}-${v}`,
         color,
+        confidence,
         transform,
+        cellIndex
       });
     }
   }
@@ -148,11 +166,46 @@ const allCells = computed(() => {
       class="proj-cell"
       :class="cell.color"
       :style="{ transform: cell.transform }"
-    ></div>
+    >
+      <span class="proj-confidence" v-if="scanMode && cell.confidence">
+        {{ cell.confidence }}%
+      </span>
+      <span class="proj-center-id" v-if="scanMode">
+        {{ cell.cellIndex }}
+      </span>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.proj-confidence {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  font-family: monospace;
+  font-weight: 800;
+  color: #000;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.proj-center-id {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 20px;
+  font-family: sans-serif;
+  font-weight: 900;
+  color: #000;
+  opacity: 0.5;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  z-index: 1;
+  pointer-events: none;
+}
+
 .face-projections-root {
   position: absolute;
   transform-style: preserve-3d;

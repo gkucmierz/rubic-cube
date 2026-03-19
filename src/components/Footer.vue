@@ -1,4 +1,5 @@
 <script setup>
+import { FOOTER_HEIGHT } from "../config/ui.js";
 const currentYear = new Date().getFullYear();
 const version = __APP_VERSION__;
 </script>
@@ -15,7 +16,7 @@ const version = __APP_VERSION__;
 .app-footer {
   width: 100%;
   padding: 0 20px;
-  height: 40px;
+  height: v-bind('FOOTER_HEIGHT + "px"');
   display: flex;
   align-items: center;
   justify-content: center;

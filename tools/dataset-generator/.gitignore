@@ -1,0 +1,17 @@
+# Environments
+.venv/
+venv/
+env/
+.env/
+
+# Python caching
+__pycache__/
+*.pyc
+
+# Data
+dataset*
+
+# Models
+*.onnx
+*.pt
+*.pth

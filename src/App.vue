@@ -1,15 +1,24 @@
 <script setup>
+import { ref } from "vue";
 import SmartCube from "./components/renderers/SmartCube.vue";
+import Generate from "./components/renderers/Generate.vue";
 import NavBar from "./components/NavBar.vue";
 import Footer from "./components/Footer.vue";
+
+const isGeneratorMode = ref(window.location.pathname === '/generate');
 </script>
 
 <template>
-  <NavBar />
-  <div class="app-content">
-    <SmartCube />
-  </div>
-  <Footer />
+  <template v-if="!isGeneratorMode">
+    <NavBar />
+    <div class="app-content">
+      <SmartCube />
+    </div>
+    <Footer />
+  </template>
+  <template v-else>
+    <Generate />
+  </template>
 </template>
 
 <style scoped>

@@ -6,18 +6,22 @@ import { LAYER_ANIMATION_DURATION, MIDDLE_SLICES_ENABLED } from "../../config/se
 import CubeMoveControls from "./CubeMoveControls.vue";
 import MoveHistoryPanel from "./MoveHistoryPanel.vue";
 import FaceProjections from "./FaceProjections.vue";
+import CameraPanel from "./CameraPanel.vue";
+import Gyroscope from "../ui/Gyroscope.vue";
 import { DeepCube } from "../../utils/DeepCube.js";
 import { showToast } from "../../utils/toastHelper.js";
 import { identityMatrix, rotateXMatrix, rotateYMatrix, rotateZMatrix, multiplyMatrices, matToQuat, slerp, quatToMat } from "../../utils/matrix.js";
+import * as THREE from 'three';
 import { MOVE_MAP, INTERNAL_TO_UI, getAxisIndexForBase, getMathDirectionForBase, getDragMoveLabel, coerceStepsToSign, formatMoveLabel } from "../../utils/moveMapping.js";
 import { easeInOutCubic, easeInOutCubicDerivative, cubicEaseWithInitialVelocity, cubicEaseWithInitialVelocityDerivative } from "../../utils/easing.js";
 import { getFaceNormal as getFaceNormalRaw, getAllowedAxes as getAllowedAxesRaw, getAxisVector, cross, project as projectRaw } from "../../utils/cubeProjection.js";
 import { tokenReducer } from "../../utils/tokenReducer.js";
 
 const { cubies, deepCubeState, initCube, rotateLayer, rotateSlice, turn, FACES, solve, solveResult, solveError, isSolverReady } = useCube();
-const { isCubeTranslucent, projectionMode } = useSettings();
+const { isCubeTranslucent, projectionMode, scanMode } = useSettings();
 
-// Bind FACES and viewMatrix to imported helpers
+const scannedColors = ref({}); // Maps "cubieId:face" -> { color: 'red', confidence: 99 }
+const colorHistory = new Map(); // Tracks history weights for stabilization
 const getFaceNormal = (face) => getFaceNormalRaw(face, FACES);
 const getAllowedAxes = (face) => getAllowedAxesRaw(face, FACES);
 const project = (v) => projectRaw(v, viewMatrix.value);
@@ -36,6 +40,23 @@ const isViewDefault = computed(() => {
     if (Math.abs(m[i] - d[i]) > 0.001) return false;
   }
   return true;
+});
+
+// Calculate current Euler angles from the visual viewMatrix for the Gyroscope
+const viewEuler = computed(() => {
+  if (!viewMatrix.value) return { pitch: 0, yaw: 0, roll: 0 };
+
+  // THREE.Matrix4 stores elements in column-major order, just like our viewMatrix array
+  const mat = new THREE.Matrix4().fromArray(viewMatrix.value);
+
+  // Extract Euler angles, using YXZ order to match our manual rotation schema
+  const euler = new THREE.Euler().setFromRotationMatrix(mat, 'YXZ');
+
+  return {
+    pitch: euler.x * 180 / Math.PI,
+    yaw: euler.y * 180 / Math.PI,
+    roll: euler.z * 180 / Math.PI
+  };
 });
 
 const resetCamera = () => {
@@ -64,6 +85,186 @@ const SCALE = 100;
 const GAP = 0;
 const MIN_MOVES_COLUMN_GAP = 6;
 const movesColumnGap = ref(MIN_MOVES_COLUMN_GAP);
+
+// --- Scan Mode: Pose → viewMatrix via SLERP ----
+let scanAnimId = null;
+const SCAN_SLERP_DURATION = 400; // ms — increased to smooth out CV flickering
+
+// Debug numbering to verify OpenCV 3D pose mapping
+const getDebugFaceNumber = (face) => {
+  const map = { front: 1, up: 2, right: 3, back: 4, left: 5, down: 6 };
+  return map[face] || '';
+};
+
+// State for unwrapping symmetrical rotations
+const trackedAngles = { pitch: 0, yaw: 0, roll: 0 };
+const rawPose = ref({ pitch: 0, yaw: 0, roll: 0 });
+
+const unwrapSymmetric = (tracked, measured, symmetry = 90) => {
+  return Math.round((tracked - measured) / symmetry) * symmetry + measured;
+};
+
+const onPoseUpdate = (pose) => {
+  if (!scanMode.value) return;
+  if (!pose.matrix) return;
+
+  // Update raw pose for UI display
+  rawPose.value.pitch = pose.rawPitch || pose.pitch;
+  rawPose.value.yaw = pose.rawYaw || pose.yaw;
+  rawPose.value.roll = pose.rawRoll || pose.roll;
+
+    // --- NEW MULTI-FACE SCANNING LOGIC ---
+    const cvColorToCss = { 'R': 'red', 'G': 'green', 'B': 'blue', 'O': 'orange', 'Y': 'yellow', 'W': 'white', '?': 'black' };
+    const m = pose.matrix;
+
+    if (pose.allFaceColors) {
+      // Iterate over all 6 logical faces
+      for (const [faceName, faceColors] of Object.entries(pose.allFaceColors)) {
+        const nFace = getFaceNormal(faceName);
+        // Dot product with camera Z axis (m[2], m[6], m[10])
+        const cz = nFace.x * m[2] + nFace.y * m[6] + nFace.z * m[10];
+
+        // Only process faces that are visible (pointing towards camera)
+        if (cz > 0.1) {
+          // Find the 9 logical cubies on this face
+          const faceCubies = cubies.value.filter(c => {
+            return Math.round(c.x * nFace.x + c.y * nFace.y + c.z * nFace.z) === 1;
+          });
+
+          if (faceCubies.length === 9) {
+            // Project 3D visual coordinates to 2D screen coordinates
+            const projected = faceCubies.map(c => {
+               const sx = c.x * m[0] + c.y * m[4] + c.z * m[8];
+               const sy = c.x * m[1] + c.y * m[5] + c.z * m[9];
+               return { cubie: c, sx, sy };
+            });
+
+            // Sort Top-to-Bottom (Descending Y), then Left-to-Right (Ascending X)
+            projected.sort((a, b) => b.sy - a.sy);
+            const rows = [
+               projected.slice(0, 3).sort((a, b) => a.sx - b.sx),
+               projected.slice(3, 6).sort((a, b) => a.sx - b.sx),
+               projected.slice(6, 9).sort((a, b) => a.sx - b.sx)
+            ];
+            const sortedProjected = [...rows[0], ...rows[1], ...rows[2]];
+
+            // Apply colors with EMA Stabilization
+            sortedProjected.forEach((p, idx) => {
+               const key = `${p.cubie.id}:${faceName}`;
+               const detectedColorChar = faceColors[idx];
+
+               if (!colorHistory.has(key)) {
+                 colorHistory.set(key, { 'R': 0, 'G': 0, 'B': 0, 'O': 0, 'Y': 0, 'W': 0, '?': 0 });
+               }
+
+               const history = colorHistory.get(key);
+               // 1. Decay by 15% (Stabilization Memory)
+               for (const k in history) { history[k] *= 0.85; }
+
+               // 2. Boost detected color (Max 20 per frame if 100% confidence)
+               if (detectedColorChar && history[detectedColorChar] !== undefined) {
+                 history[detectedColorChar] += (pose.confidence / 100) * 20;
+               }
+            });
+          }
+        }
+      }
+
+      // --- Post-Processing Validation across all predictions ---
+      const allPredictions = [];
+      for (const [key, history] of colorHistory.entries()) {
+        let maxW = 0, secondW = 0, bestC = '?', secondC = '?';
+        for (const k in history) {
+           if (history[k] > maxW) { secondW = maxW; secondC = bestC; maxW = history[k]; bestC = k; }
+           else if (history[k] > secondW) { secondW = history[k]; secondC = k; }
+        }
+        allPredictions.push({ key, history, bestC, maxW, secondC, secondW });
+      }
+
+      const colorGroups = { 'R': [], 'G': [], 'B': [], 'O': [], 'Y': [], 'W': [] };
+      for (const p of allPredictions) {
+        if (p.bestC !== '?' && p.maxW > 10) {
+          colorGroups[p.bestC].push(p);
+        }
+      }
+
+      const finalAssignments = { ...scannedColors.value };
+      const toReevaluate = [];
+
+      for (const [col, arr] of Object.entries(colorGroups)) {
+        if (arr.length > 9) {
+          arr.sort((a, b) => b.maxW - a.maxW);
+          for (let i = 0; i < 9; i++) {
+             finalAssignments[arr[i].key] = { color: cvColorToCss[col], confidence: Math.min(99, Math.round(arr[i].maxW)) };
+          }
+          for (let i = 9; i < arr.length; i++) { toReevaluate.push(arr[i]); }
+        } else {
+          for (const p of arr) { finalAssignments[p.key] = { color: cvColorToCss[col], confidence: Math.min(99, Math.round(p.maxW)) }; }
+        }
+      }
+
+      for (const p of toReevaluate) {
+         if (p.secondC !== '?' && p.secondW > 10) {
+            finalAssignments[p.key] = { color: cvColorToCss[p.secondC], confidence: Math.min(99, Math.round(p.secondW)) };
+            p.history[p.bestC] *= 0.8;
+         } else {
+            finalAssignments[p.key] = { color: 'black', confidence: 0 };
+            p.history[p.bestC] *= 0.5;
+         }
+      }
+
+      scannedColors.value = finalAssignments;
+    } else {
+      // Aggressive decay if tracking is lost or allFaceColors is null
+      for (const [key, history] of colorHistory.entries()) {
+        for (const k in history) { history[k] *= 0.7; } // 30% reduction per frame
+      }
+    }
+
+  // Cancel any running scan animation
+  if (scanAnimId) {
+    cancelAnimationFrame(scanAnimId);
+    scanAnimId = null;
+  }
+
+  // Unwrap the ML predictions to support continuous rotation > 90 degrees
+  trackedAngles.pitch = unwrapSymmetric(trackedAngles.pitch, pose.pitch);
+  trackedAngles.yaw = unwrapSymmetric(trackedAngles.yaw, pose.yaw);
+  trackedAngles.roll = unwrapSymmetric(trackedAngles.roll, pose.roll);
+
+  // Convert unwrapped Euler angles to quaternion (YXZ order matches GeneratorCube.vue)
+  const euler = new THREE.Euler(
+    trackedAngles.pitch * Math.PI / 180,
+    trackedAngles.yaw * Math.PI / 180,
+    trackedAngles.roll * Math.PI / 180,
+    'YXZ'
+  );
+
+  const targetQuat = new THREE.Quaternion().setFromEuler(euler);
+
+  // Convert current and target to quaternions
+  const startQuat = matToQuat(viewMatrix.value);
+  const startTime = performance.now();
+
+  const animate = (time) => {
+    if (!scanMode.value) return; // Stop if we left scan mode
+
+    const elapsed = time - startTime;
+    const p = Math.min(elapsed / SCAN_SLERP_DURATION, 1);
+
+    // Use SLERP for distortion-free rotation interpolation
+    const q = slerp(startQuat, targetQuat, p);
+    viewMatrix.value = quatToMat(q);
+
+    if (p < 1) {
+      scanAnimId = requestAnimationFrame(animate);
+    } else {
+      scanAnimId = null;
+    }
+  };
+
+  scanAnimId = requestAnimationFrame(animate);
+};
 
 // --- Interaction State ---
 const isDragging = ref(false);
@@ -102,6 +303,7 @@ const rotationDebugCurrent = computed(() => {
 // --- Interaction Logic ---
 
 const onMouseDown = (e) => {
+  if (scanMode.value) return; // Disable all mouse interaction in scan mode
   isDragging.value = true;
   startX.value = e.clientX;
   startY.value = e.clientY;
@@ -621,9 +823,14 @@ const closeAddModal = () => {
 };
 
 const handleKeydown = (e) => {
-  if (e.key === "Escape" && isAddModalOpen.value) {
-    e.preventDefault();
-    closeAddModal();
+  if (e.key === "Escape") {
+    if (isAddModalOpen.value) {
+      e.preventDefault();
+      closeAddModal();
+    } else if (scanMode.value) {
+      e.preventDefault();
+      scanMode.value = false;
+    }
   }
 };
 
@@ -872,11 +1079,16 @@ onUnmounted(() => {
             v-for="(color, face) in c.faces"
             :key="face"
             class="sticker"
-            :class="[face, color]"
+            :class="[face, color === 'black' ? 'black' : (scanMode ? (scannedColors[`${c.id}:${face}`]?.color || 'white') : color)]"
             :style="{ opacity: isCubeTranslucent ? 0.3 : 1 }"
             :data-id="c.id"
             :data-face="face"
-          ></div>
+          >
+            <!-- Show confidence percentage from CV -->
+            <span class="debug-face-number" v-if="scanMode && color !== 'black' && scannedColors[`${c.id}:${face}`]" style="transform: translate(-50%, -50%) translateZ(10px)">
+              {{ scannedColors[`${c.id}:${face}`].confidence }}%
+            </span>
+          </div>
         </div>
       </div>
 
@@ -888,11 +1100,14 @@ onUnmounted(() => {
         :SCALE="SCALE"
         :active-layer="activeLayer"
         :current-layer-rotation="currentLayerRotation"
-        :animate-layers="projectionMode === 2"
+        :animate-layers="projectionMode === 2 && !scanMode"
+        :scan-mode="scanMode"
+        :scanned-colors="scannedColors"
       />
     </div>
 
     <CubeMoveControls
+      v-if="!scanMode"
       :is-view-default="isViewDefault"
       @move="applyMove"
       @scramble="scramble"
@@ -901,11 +1116,25 @@ onUnmounted(() => {
     />
 
     <MoveHistoryPanel
+      v-if="!scanMode"
       :moves="displayMoves"
       @reset="resetQueue"
       @copy="copyQueueToClipboard"
       @add-moves="handleAddMoves"
       @open-add-modal="openAddModal"
+    />
+
+    <div class="gyroscope-container">
+      <Gyroscope
+        :pitch="scanMode ? rawPose.pitch : viewEuler.pitch"
+        :yaw="scanMode ? rawPose.yaw : viewEuler.yaw"
+        :roll="scanMode ? rawPose.roll : viewEuler.roll"
+      />
+    </div>
+
+    <CameraPanel
+      :active="scanMode"
+      @pose-update="onPoseUpdate"
     />
 
 
@@ -1186,5 +1415,19 @@ onUnmounted(() => {
 }
 .black::after {
   display: none;
+}
+
+.debug-face-number {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  font-family: monospace;
+  font-weight: 800;
+  color: #000;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+  z-index: 2;
+  pointer-events: none;
 }
 </style>
